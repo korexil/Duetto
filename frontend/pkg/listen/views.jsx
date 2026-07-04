@@ -676,6 +676,8 @@ function LSChatView({ tab, setTab, idx, setIdx, playing, setPlaying, ncmSong, nc
   const pickTop = (k) => { setTopStyle(k); try { localStorage.setItem('ls-room-top', k); } catch (e) {} };
   const toggleBg = () => setBgOn(v => { const nv = !v; try { localStorage.setItem('ls-room-bg-on', nv ? '1' : '0'); } catch (e) {} return nv; });
   const toggleAvas = () => setHideAvas(function (h) { const nh = !h; try { localStorage.setItem('ls-room-hideava', nh ? '1' : '0'); } catch (e) {} return nh; });
+  const [timeAware, setTimeAware] = vUseState(function () { try { return localStorage.getItem('ls-room-timeaware') !== '0'; } catch (e) { return true; } });
+  const toggleTimeAware = () => setTimeAware(function (v) { const nv = !v; try { localStorage.setItem('ls-room-timeaware', nv ? '1' : '0'); } catch (e) {} return nv; });
   // 房间背景层在弹层最底（app.jsx 渲染，铺到顶栏后面），这里只负责显隐
   vUseEffect(function () {
     var el = document.querySelector('.ls-room-wallbg');
@@ -885,8 +887,11 @@ function LSChatView({ tab, setTab, idx, setIdx, playing, setPlaying, ncmSong, nc
       const aCfg = (window.__lsStore && window.__lsStore.model && window.__lsStore.model.analysis) || {};
       const ai = {};
       if (aCfg.endpoint && aCfg.key) { ai.base_url = aCfg.endpoint; ai.api_key = aCfg.key; if (aCfg.name) ai.model = aCfg.name; }
-      const lyricLines = (ncmLyric ? lsParseLRC(ncmLyric) : []).map(x => x.line).slice(0, 40);
-      fetch((window.__LS_API || '/api') + '/song-analysis', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: song.id, title: title, artist: npArtist, lyrics: lyricLines, ai: ai }) })
+      // persona / 昵称 / 时间感知与对话保持同一套（前端设置为准）
+      try { const P = window.LS_PEOPLE; if (P) { if (P.yu && P.yu.name) ai.ai_name = P.yu.name; if (P.eve && P.eve.name) ai.user_name = P.eve.name; } } catch (e) {}
+      try { if (window.__lsStore && window.__lsStore.persona) ai.persona = window.__lsStore.persona; } catch (e) {}
+      try { ai.time_aware = localStorage.getItem('ls-room-timeaware') !== '0'; } catch (e) {}
+      fetch((window.__LS_API || '/api') + '/song-analysis', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: song.id, title: title, artist: npArtist, lrc: String(ncmLyric || '').slice(0, 6000), ai: ai }) })
         .then(r => r.json())
         .then(d => { if (d && d.ok && d.text) { const am = { who: 'yu', t: d.text, time: lsNow() }; setChat(c => [...c, am]); bcast(am); } })
         .catch(() => {});
@@ -1099,6 +1104,7 @@ function LSChatView({ tab, setTab, idx, setIdx, playing, setPlaying, ncmSong, nc
             <div className="row"><span>悬浮球样式</span><div className="fcseg"><button className={ballStyle === 'island' ? 'on' : ''} onClick={() => { setBallStyle('island'); try { localStorage.setItem('ls-room-ball', 'island'); } catch (e) {} }}>灵动岛</button><button className={ballStyle === 'sheet' ? 'on' : ''} onClick={() => { setBallStyle('sheet'); try { localStorage.setItem('ls-room-ball', 'sheet'); } catch (e) {} }}>声波球</button></div></div>
             <div className="row"><span>隐藏播放状态卡片</span><button className={'tg' + (hideEvents ? ' on' : '')} onClick={() => setHideEvents(function (h) { const nh = !h; try { localStorage.setItem('ls-room-hideevt', nh ? '1' : '0'); } catch (e) {} return nh; })}></button></div>
             <div className="row"><span>隐藏气泡头像</span><button className={'tg' + (hideAvas ? ' on' : '')} onClick={toggleAvas}></button></div>
+            <div className="row"><span>时间感知（AI 知道现在几点）</span><button className={'tg' + (timeAware ? ' on' : '')} onClick={toggleTimeAware}></button></div>
             <div className="ls-rset-sub">气泡样式（颜色 · 透明度 · 磨砂）</div>
             {[['other', 'AI'], ['self', '我']].map(([wk, wl]) => {
               const cfg = (bub && bub[wk]) || bubDef(wk);

@@ -78,9 +78,11 @@ function LSApp() {
   };
   const openSongById = (songId) => { const i = LS_SONGS.findIndex(s => s.id === songId); if (i >= 0) { setIdx(i); setDrawerIdx(i); } };
   const playSong = (song) => { setNcmSong(null); setNcmQueue(null); const i = LS_SONGS.findIndex(s => s.id === song.id); if (i >= 0) { setIdx(i); setCur(0); setPlaying(true); setView('player'); } };
+  const logListen = (s) => { try { fetch((window.__LS_API || '/api') + '/listen-log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: s.id, title: s.title, artist: s.artist || '', dur: s.dur || 0 }) }).catch(function(){}); } catch (e) {} };
   const loadNcm = (s) => {
     const base = window.__LS_API || '/api';
     setNcmLyric(''); setLoved(false);
+    logListen(s);
     // 本地链接歌（用户在"本地"里自己添加的直链）：直接播，不走网易云
     if (s && s.url) { lsAudioEl.src = s.url; lsAudioEl.play().catch(function(){}); return; }
     // 预取命中：上一首快放完时已把这首的 URL 取好，切歌零 fetch —— 后台（锁屏）续播不断
