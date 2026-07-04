@@ -175,7 +175,7 @@ function LSSongDrawer({ song: songProp, ncmSong, ncmId, loved, onToggleLove, inL
 
 // ════════ C. 听歌档案 ════════
 function LSArchiveView({ onOpenSong }) {
-  // 过滤早期演示占位（s1-s4 假歌的种子记录），只显示真实的问Ta记录
+  // 过滤旧版出厂占位（s1-s4）的记录，只显示真实的问Ta记录
   const localList = (window.__lsStore.archive || []).filter(function (a) { return !/^s\d$/.test(String((a && a.songId) || '')); });
   const [srvList, setSrvList] = fUseState(null);
   fUseEffect(function () { fetch((window.__LS_API || '/api') + '/song-notes?limit=100').then(function (r) { return r.json(); }).then(function (d) { if (d && d.ok && d.notes && d.notes.length) setSrvList(lsNotesToRecs(d.notes)); }).catch(function () {}); }, []);

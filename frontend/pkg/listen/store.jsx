@@ -1,7 +1,7 @@
 /* listen/store.jsx — A–F 数据与本地存储 + 问 Ta 生成。
    store 形状：{ archive:[], library:[], fm:[], model:{name,endpoint,key} }
-   全部持久化到 localStorage('ls-store-v1')。占位数据让界面有故事感；
-   接真实网易云/后端时替换 SEED 即可。问 Ta 走 window.claude.complete 真实生成。 */
+   全部持久化到 localStorage('ls-store-v1')。开源版不注入演示收藏/FM；
+   问 Ta 走 window.claude.complete 真实生成。 */
 
 const LS_STORE_KEY = 'ls-store-v1';
 
@@ -17,17 +17,8 @@ const LS_ASK_CHIPS = [
 function lsSeedStore() {
   return {
     archive: [],
-    library: [
-      { songId: 's1', title: '夜色温柔', artist: 'Aria', cover: 'ls-cover-1', pinned: true,  notes: 6, last: '昨天 23:14' },
-      { songId: 's4', title: '斜阳',  artist: 'Sol', cover: 'ls-cover-4', pinned: false, notes: 2, last: 'Jun 10' },
-      { songId: 's2', title: '晴天预报',  artist: 'Marina',  cover: 'ls-cover-2', pinned: false, notes: 1, last: '前天 21:02' },
-    ],
-    fm: [
-      { id: 'f1', title: '夜行电车', artist: 'Cymbals', cover: 'ls-cover-2', disliked: false },
-      { id: 'f2', title: '海雾',     artist: 'Sol', cover: 'ls-cover-4', disliked: false },
-      { id: 'f3', title: '旧照片',     artist: 'Ren',     cover: 'ls-cover-3', disliked: false },
-      { id: 'f4', title: '夜色温柔', artist: 'Aria',    cover: 'ls-cover-1', disliked: false },
-    ],
+    library: [],
+    fm: [],
     model: { chat: { name: '', endpoint: '', key: '' }, analysis: { name: '', endpoint: '', key: '' } },
   };
 }
@@ -36,8 +27,11 @@ function lsLoadStore() {
   let s;
   try { s = JSON.parse(localStorage.getItem(LS_STORE_KEY)); } catch (e) { s = null; }
   if (!s || !s.archive) s = lsSeedStore();
-  // 容错补全字段
+  // 容错补全字段，并清理旧版出厂演示数据。
   s.archive = s.archive || []; s.library = s.library || []; s.fm = s.fm || [];
+  const demoSongIds = { s1: true, s2: true, s3: true, s4: true };
+  s.library = s.library.filter(function (x) { return x && !demoSongIds[String(x.songId || '')]; });
+  s.fm = s.fm.filter(function (x) { return x && !/^f[1-4]$/.test(String(x.id || '')) && !demoSongIds[String(x.id || '')]; });
   s.model = s.model || {};
   if (s.style === undefined) s.style = '';
   if (!s.model.chat) s.model.chat = (s.model.name !== undefined && s.model.name !== null && s.model.chat === undefined && !s.model.analysis) ? { name: s.model.name || '', endpoint: s.model.endpoint || '', key: s.model.key || '' } : (s.model.chat || { name: '', endpoint: '', key: '' });

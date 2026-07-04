@@ -41,10 +41,10 @@ function LSBrowseView({ onPlay, onOpenSong, onOpenFM }) {
       <div className="si"><b>{s.title}</b><i>{s.artist}{s.reason ? ' · ' + s.reason : (s.album ? ' · ' + s.album : '')}</i></div>
     </div>
   );
-  const demoResults = q.trim()
+  const localResults = q.trim()
     ? LS_SONGS.filter(s => (s.title + s.artist + s.album).toLowerCase().includes(q.trim().toLowerCase()))
     : null;
-  const results = ncmLogged ? (q.trim() ? ncmResults : null) : demoResults;
+  const results = ncmLogged ? (q.trim() ? ncmResults : null) : localResults;
   const artists = (ncmLogged && q.trim()) ? ncmArtists : null;
 
   return (
@@ -115,26 +115,26 @@ function LSBrowseView({ onPlay, onOpenSong, onOpenFM }) {
                 ? (ncmDaily === null
                     ? <div className="ls-empty"><div className="e-t">加载中…</div></div>
                     : ncmDaily.map((s, i) => ncmRow(s, ncmDaily, i, i + 1)))
-                : LS_DAILY.map((d, i) => { const s = lsById(d.songId); if (!s) return null; return (
+                : (LS_DAILY.length ? LS_DAILY.map((d, i) => { const s = lsById(d.songId); if (!s) return null; return (
                     <div className="ls-songrow" key={i} onClick={() => onPlay(s)}>
                       <span className="no">{String(i + 1).padStart(2, '0')}</span>
                       <div className="cv"><LSCover cover={s.cover} size={100} /></div>
                       <div className="si"><b>{s.title}</b><i>{s.artist} · {d.reason}</i></div>
                       <button className="more" onClick={(e) => { e.stopPropagation(); onOpenSong(s); }}>›</button>
                     </div>
-                  ); })}
+                  ); }) : <div className="ls-empty"><div className="e-t">登录网易云后显示每日推荐</div><div className="e-s">也可以直接搜索歌曲播放</div></div>)}
             </div>
           )}
 
           {tab === 'recent' && (
             <div className="ls-recent">
-              {LS_RECENT.map((r, i) => { const s = lsById(r.songId); if (!s) return null; return (
+              {LS_RECENT.length ? LS_RECENT.map((r, i) => { const s = lsById(r.songId); if (!s) return null; return (
                 <div className="ls-songrow" key={i} onClick={() => onPlay(s)}>
                   <div className="cv"><LSCover cover={s.cover} size={100} /></div>
                   <div className="si"><b>{s.title}</b><i>{s.artist} · 听过 {r.times} 次</i></div>
                   <span className="when">{r.when}</span>
                 </div>
-              ); })}
+              ); }) : <div className="ls-empty"><div className="e-t">还没有最近常听</div><div className="e-s">播放真实歌曲后这里会有记录</div></div>}
             </div>
           )}
         </>
@@ -202,7 +202,7 @@ function LSPlaylistView(props) {
     fetch(LSAPI + '/ncm/playlist?id=' + pl.id).then(r => r.json()).then(d => { if (d && d.songs) setOpenTracks(d.songs); }).catch(() => {});
   };
 
-  // R8 真实：最近播放 / 排行榜（登录后拉真数据；未登录用 seed 演示）
+  // R8 真实：最近播放 / 排行榜（登录后拉真数据；未登录为空状态）
   const [ncmRecent, setNcmRecent] = v3UseState(null);   // 真实最近播放（null=未加载）
   const [ncmTops, setNcmTops] = v3UseState(null);       // 排行榜列表（null=未加载）
   const [openTop, setOpenTop] = v3UseState(null);       // 当前展开的榜 {id,name}
@@ -339,7 +339,7 @@ function LSPlaylistView(props) {
 
   const backHead = (title) => <div className="ls-sec-h ls-subback" onClick={() => setSub(null)}>← {title}</div>;
 
-  // R8 子页：最近 → 真实最近播放（登录）/ seed 演示（未登录）
+  // R8 子页：最近 → 真实最近播放（登录）/ 空状态（未登录）
   if (sub === 'recent') {
     if (ncmUser) {
       if (ncmRecent === null) return <div className="ls-body ls-profile">{backHead('最近播放')}<div className="ls-empty"><div className="e-t">加载中…</div></div></div>;
@@ -362,7 +362,7 @@ function LSPlaylistView(props) {
   if (sub === 'local') {
     return <LSLocalSongs backHead={backHead} />;
   }
-  // R8 子页：排行 → 真实排行榜，点榜展开曲目（登录）/ seed 演示（未登录）
+  // R8 子页：排行 → 真实排行榜，点榜展开曲目（登录）/ 空状态（未登录）
   if (sub === 'rank') {
     if (ncmUser) {
       if (openTop) {
@@ -398,7 +398,7 @@ function LSPlaylistView(props) {
         </div>
       );
     }
-    return <div className="ls-body ls-profile">{backHead('听歌排行')}{LS_SONGS.map((s, i) => songRow(s, LS_SONGS, i))}</div>;
+    return <div className="ls-body ls-profile">{backHead('听歌排行')}{LS_SONGS.length ? LS_SONGS.map((s, i) => songRow(s, LS_SONGS, i)) : <div className="ls-empty"><div className="e-t">登录网易云后显示排行</div></div>}</div>;
   }
 
   // R8 装扮子页 + R10 背景设置/更换/清空
@@ -466,13 +466,13 @@ function LSPlaylistView(props) {
         <div className="ls-pf-namerow">
           <LSEdit eid="pf-name" tag="b" cls="ls-pf-name" def="You & AI" />
         </div>
-        <LSEdit eid="pf-sign" tag="div" cls="ls-pf-sign" def="在一起听歌的第 365 天" />
+        <LSEdit eid="pf-sign" tag="div" cls="ls-pf-sign" def="一起听歌" />
         <div className="ls-pf-stat">
-          <span><b><LSEdit eid="pf-days" def="365" /></b>在一起</span>
+          <span><b><LSEdit eid="pf-days" def="0" /></b>在一起</span>
           <span className="dv"></span>
-          <span><b><LSEdit eid="pf-favs" def="88" /></b>共同收藏</span>
+          <span><b><LSEdit eid="pf-favs" def="0" /></b>共同收藏</span>
           <span className="dv"></span>
-          <span><b><LSEdit eid="pf-sync" def="Lv.7" /></b>默契</span>
+          <span><b><LSEdit eid="pf-sync" def="0" /></b>默契</span>
         </div>
       </div>
 
@@ -497,7 +497,7 @@ function LSPlaylistView(props) {
         )}
       </div>
 
-      {/* R9 歌单：点开进曲目面板（登录态 null=加载中 / 有数据=真实；未登录=演示）*/}
+      {/* R9 歌单：点开进曲目面板（登录态 null=加载中 / 有数据=真实；未登录=空状态）*/}
       <div className="ls-pf-section">
         {ncmUser ? (
           ncmPlaylists === null ? (
@@ -517,7 +517,7 @@ function LSPlaylistView(props) {
         ) : (
           <>
             <div className="ls-sec-h">歌单 {LS_PLAYLISTS.length}</div>
-            {LS_PLAYLISTS.map(p => (
+            {LS_PLAYLISTS.length ? LS_PLAYLISTS.map(p => (
               <div className="ls-pl-row" key={p.id} onClick={() => setOpenPl({ id: p.id, name: p.name, songs: p.songs || [] })}>
                 <div className={'cv' + (p.heart ? ' heart' : '')}>
                   {p.heart ? <span className="ht"></span> : <LSCover cover={p.cover} size={120} radius={10} />}
@@ -526,7 +526,7 @@ function LSPlaylistView(props) {
                 <div className="si"><b>{p.name}</b><i>{p.count} 首{p.us ? ' · 和 TA 共建' : ''}</i></div>
                 <span className="play">{LSIcon.play({ width: 14, height: 14 })}</span>
               </div>
-            ))}
+            )) : <div className="ls-empty"><div className="e-t">还没有歌单</div><div className="e-s">连接网易云账号后显示你的歌单</div></div>}
           </>
         )}
       </div>

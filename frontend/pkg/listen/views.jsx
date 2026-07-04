@@ -22,13 +22,14 @@ function lsParseLRC(lrc) {
 // coverMode: 'vinyl' | 'card'；playMode: 'loop' | 'one' | 'shuffle'
 function LSPlayerView({ idx, setIdx, playing, setPlaying, cur, setCur, loved, setLoved,
   coverMode, setCoverMode, playMode, cyclePlayMode, onOpenDrawer, onPickLyric, onOpenQueue, onOpenComments, onEnterRoom, ncmSong, ncmLyric, ncmQueue, playNcmIdx, onPrev, onNext }) {
-  const song = (ncmQueue && ncmQueue.list && ncmQueue.list.length) ? ncmQueue.list[ncmQueue.idx] : (ncmSong || LS_SONGS[idx]);
+  const song = ((ncmQueue && ncmQueue.list && ncmQueue.list.length) ? ncmQueue.list[ncmQueue.idx] : (ncmSong || LS_SONGS[idx])) || window.LS_EMPTY_SONG;
   const goPrev = onPrev || ((ncmQueue && playNcmIdx) ? () => playNcmIdx(ncmQueue.idx - 1) : null);
   const goNext = onNext || ((ncmQueue && playNcmIdx) ? () => playNcmIdx(ncmQueue.idx + 1) : null);
-  const lyrics = ncmSong ? lsParseLRC(ncmLyric) : song.lyrics;
+  const lyrics = ncmSong ? lsParseLRC(ncmLyric) : ((song && song.lyrics) || []);
   const base = window.__LS_API || '/api';
   const n = LS_SONGS.length;
-  const rel = (d) => ((idx + d) % n + n) % n;
+  const rel = (d) => n ? ((idx + d) % n + n) % n : 0;
+  const dur = (song && song.dur) || 0;
   const [pane, setPane] = vUseState(0);
   const drag = vUseRef({ x: 0, on: false, moved: 0 });
   const lyBox = vUseRef(null), lyOn = vUseRef(null), lyHold = vUseRef(0), lyAuto = vUseRef(false);
@@ -218,7 +219,7 @@ function LSPlayerView({ idx, setIdx, playing, setPlaying, cur, setCur, loved, se
   const pdrag = vUseRef(false);
   const seekTo = (clientX, track) => {
     const r = track.getBoundingClientRect();
-    const t = Math.max(0, Math.min(1, (clientX - r.left) / r.width)) * song.dur;
+    const t = Math.max(0, Math.min(1, (clientX - r.left) / r.width)) * dur;
     setCur(t); try { window.__lsAudioEl.currentTime = t; } catch (er) {}
   };
   const seek = (e) => seekTo(e.clientX, e.currentTarget);
@@ -233,7 +234,7 @@ function LSPlayerView({ idx, setIdx, playing, setPlaying, cur, setCur, loved, se
     if (snapTimer.current) clearTimeout(snapTimer.current);
     lyHold.current = 0;
   };
-  const pct = cur / song.dur * 100;
+  const pct = dur ? cur / dur * 100 : 0;
 
   // 滑动切换封面/歌词页
   const onDown = (e) => { drag.current = { x: (e.touches ? e.touches[0].clientX : e.clientX), y: (e.touches ? e.touches[0].clientY : e.clientY), on: true, moved: 0, my: 0 }; };
@@ -300,9 +301,9 @@ function LSPlayerView({ idx, setIdx, playing, setPlaying, cur, setCur, loved, se
                         </div>
                       );
                     }
-                    const s = LS_SONGS[rel(d)];
+                    const s = n ? LS_SONGS[rel(d)] : song;
                     return (
-                      <div key={d} className={'ls-card ' + cls(d)} onClick={() => d === 0 ? setCoverMode('vinyl') : setIdx(rel(d))}>
+                      <div key={d} className={'ls-card ' + cls(d)} onClick={() => (d === 0 || !n) ? setCoverMode('vinyl') : setIdx(rel(d))}>
                         <LSCover cover={s.cover} size={360} shape="rounded" radius={14} />
                       </div>
                     );
@@ -389,7 +390,7 @@ function LSPlayerView({ idx, setIdx, playing, setPlaying, cur, setCur, loved, se
         <button className={'eb' + (loved ? ' on' : '')} onClick={() => {
           const willLove = !loved; setLoved(l => !l);
           if (song && song.id && /^\d+$/.test(String(song.id))) { try { fetch(base + '/ncm/like?id=' + song.id + '&like=' + (willLove ? 1 : 0)).catch(function () {}); } catch (e) {} }
-          if (willLove && song && song.id) { try { const st = window.__lsStore; if (st && st.library && !st.library.some(x => x.songId === song.id)) { st.library.unshift({ songId: song.id, title: song.title, artist: song.artist, cover: song.cover, pinned: false, notes: 0, last: Date.now() }); if (window.lsSaveStore) window.lsSaveStore(st); } flash('已收藏 · ' + song.title); } catch (e) {} }
+          if (willLove && song && song.id) { try { window.__lsActor = { who: 'user', t: Date.now() }; if (window.__lsRoomEvent && song.title) window.__lsRoomEvent('红心了《' + song.title + '》'); const st = window.__lsStore; if (st && st.library && !st.library.some(x => x.songId === song.id)) { st.library.unshift({ songId: song.id, title: song.title, artist: song.artist, cover: song.cover, pinned: false, notes: 0, last: Date.now() }); if (window.lsSaveStore) window.lsSaveStore(st); } flash('已收藏 · ' + song.title); } catch (e) {} }
         }}>
           <svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-10-9.2C.4 8.6 2 5 5.4 5c2 0 3.3 1.1 4.1 2.3C10.3 6.1 11.6 5 13.6 5 17 5 18.6 8.6 17 11.8 14.5 16.4 12 21 12 21z"/></svg>
         </button>
@@ -440,7 +441,7 @@ function LSPlayerView({ idx, setIdx, playing, setPlaying, cur, setCur, loved, se
             <svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-10-9.2C.4 8.6 2 5 5.4 5c2 0 3.3 1.1 4.1 2.3C10.3 6.1 11.6 5 13.6 5 17 5 18.6 8.6 17 11.8 14.5 16.4 12 21 12 21z"/></svg>
           </div>
         </div>
-        <div className="ls-prog-time"><span>{lsFmt(cur)}</span><span>极高音质</span><span>{lsFmt(song.dur)}</span></div>
+        <div className="ls-prog-time"><span>{lsFmt(cur)}</span><span>极高音质</span><span>{lsFmt(dur)}</span></div>
       </div>
 
       {/* 控制：播放方式 · 上一首 · 播放 · 下一首 · 队列 */}
@@ -471,7 +472,7 @@ function LSQueueSheet({ idx, setIdx, ncmQueue, playNcmIdx, playMode, cyclePlayMo
     clearTimeout(window.__lsQueueToastTimer);
     window.__lsQueueToastTimer = setTimeout(function () { setToast(''); }, 1600);
   };
-  const currentSong = () => real ? ((ncmQueue.list && ncmQueue.list[ncmQueue.idx]) || ncmQueue.list[0]) : (LS_SONGS[idx] || LS_SONGS[0]);
+  const currentSong = () => real ? ((ncmQueue.list && ncmQueue.list[ncmQueue.idx]) || ncmQueue.list[0]) : (LS_SONGS[idx] || window.LS_EMPTY_SONG);
   const removeAt = (e, songI) => { stop(e); setList(l => l.filter(x => x !== songI)); };
   const removeRealAt = (e, i) => {
     stop(e);
@@ -517,15 +518,16 @@ function LSQueueSheet({ idx, setIdx, ncmQueue, playNcmIdx, playMode, cyclePlayMo
       say('已打开下载');
     }
   };
-  const saveCurrent = (e) => {
+  const saveQueue = (e) => {
     stop(e);
-    var song = currentSong();
-    if (song && song.id && /^\d+$/.test(String(song.id)) && window.__lsSavePicker) {
-      window.__lsSavePicker(song);
+    var songs = real ? (ncmQueue.list || []) : list.map(function (songI) { return LS_SONGS[songI]; }).filter(Boolean);
+    songs = songs.filter(function (s) { return s && s.id && /^\d+$/.test(String(s.id)); });
+    if (songs.length && window.__lsSavePicker) {
+      window.__lsSavePicker(songs);
       onClose();
       return;
     }
-    say('这首暂不能收藏');
+    say('当前列表没有可收藏到歌单的网易云歌曲');
   };
   return (
     <div className="ls-sheet-mask" onClick={onClose}>
@@ -542,7 +544,7 @@ function LSQueueSheet({ idx, setIdx, ncmQueue, playNcmIdx, playMode, cyclePlayMo
           <button className="chip" onClick={(e) => { stop(e); say('智能过渡已保持当前设置'); }}><span className="merge"></span>智能过渡</button>
           <div className="sp"></div>
           <button className="ic" title="下载" onClick={downloadCurrent}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12 4v11M8 11l4 4 4-4M5 20h14"/></svg></button>
-          <button className="ic" title="收藏" onClick={saveCurrent}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 9v6M9 12h6"/></svg></button>
+          <button className="ic" title="收藏整个播放列表" onClick={saveQueue}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 9v6M9 12h6"/></svg></button>
           <button className="ic" title="清空" onClick={clearQueue}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M5 7h14M9 7V5h6v2M7 7l1 13h8l1-13"/></svg></button>
         </div>
         {toast && <div className="ls-toast" style={{ position: 'absolute', left: '50%', bottom: 22, transform: 'translateX(-50%)', zIndex: 30, padding: '8px 16px', borderRadius: 20, background: 'rgba(40,36,42,.92)', color: '#fff', fontFamily: 'var(--ls-cn)', fontSize: 12, whiteSpace: 'nowrap' }}>{toast}</div>}
@@ -575,7 +577,7 @@ function LSQueueSheet({ idx, setIdx, ncmQueue, playNcmIdx, playMode, cyclePlayMo
 
 // ── 评论 · 全屏 ────────────────────────────────────────
 function LSCommentsFull({ song: songProp, idx, onClose }) {
-  const song = songProp || LS_SONGS[idx] || LS_SONGS[0];
+  const song = songProp || LS_SONGS[idx] || window.LS_EMPTY_SONG;
   const realId = song && /^\d+$/.test(String(song.id)) ? song.id : null;
   const skey = 'ls-mycomments-' + (song && song.id);
   const [tab, setTab] = vUseState('ncm');
@@ -737,7 +739,7 @@ function LSChatView({ tab, setTab, idx, setIdx, playing, setPlaying, ncmSong, nc
 
   const audio = window.__lsAudioEl;
   const isPlaying = (playing != null) ? playing : (audio ? !audio.paused : true);
-  const song = ncmSong || (ncmQueue && ncmQueue.list && ncmQueue.list.length ? ncmQueue.list[ncmQueue.idx] : LS_SONGS[idx]) || LS_SONGS[0];
+  const song = ncmSong || (ncmQueue && ncmQueue.list && ncmQueue.list.length ? ncmQueue.list[ncmQueue.idx] : LS_SONGS[idx]) || window.LS_EMPTY_SONG;
   const dur = (song && song.dur) || (audio && audio.duration) || 0;
   const position = (cur != null) ? cur : (audio ? (audio.currentTime || 0) : 0);
   const pct = dur ? Math.max(0, Math.min(100, position / dur * 100)) : 0;
@@ -846,8 +848,8 @@ function LSChatView({ tab, setTab, idx, setIdx, playing, setPlaying, ncmSong, nc
   // “一起听了”实时时长（起点存 localStorage）
   const elapsed = (() => {
     let start;
-    try { const raw = localStorage.getItem('ls-room-start'); if (raw && !isNaN(parseInt(raw, 10))) start = parseInt(raw, 10); else { start = Date.now() - 58 * 60000; localStorage.setItem('ls-room-start', String(start)); } } catch (e) { start = Date.now() - 58 * 60000; }
-    const mins = Math.max(1, Math.floor((Date.now() - start) / 60000));
+    try { const raw = localStorage.getItem('ls-room-start'); if (raw && !isNaN(parseInt(raw, 10))) start = parseInt(raw, 10); else { start = Date.now(); localStorage.setItem('ls-room-start', String(start)); } } catch (e) { start = Date.now(); }
+    const mins = Math.max(0, Math.floor((Date.now() - start) / 60000));
     if (mins < 60) return mins + ' 分钟';
     const h = Math.floor(mins / 60), m = mins % 60;
     return h + ' 小时' + (m ? ' ' + m + ' 分钟' : '');
@@ -951,29 +953,6 @@ function LSChatView({ tab, setTab, idx, setIdx, playing, setPlaying, ncmSong, nc
     document.head.appendChild(st);
   }, []);
 
-  // 系统消息：播放/暂停/切歌/切换模式 时自动插入一条居中系统气泡
-  vUseEffect(() => {
-    const s = sysRef.current;
-    const np = window.__lsNowPlaying || {}; const title = np.title || (song ? song.title : ''); const npArtist = np.artist || (song && song.artist) || '';
-    const pm = playMode || '';
-    if (!s.init) { s.init = true; s.title = title; s.playing = isPlaying; s.mode = pm; return; }
-    // 谁的操作显示谁的昵称：AI 经 __lsRunAction 落盘的动作 4 秒内算 AI，其余算用户
-    const actor = window.__lsActor;
-    const isAIAct = actor && actor.who === 'ai' && (Date.now() - actor.t) < 4000;
-    const who = isAIAct
-      ? ((window.LS_PEOPLE && window.LS_PEOPLE.yu && window.LS_PEOPLE.yu.name) || 'AI')
-      : ((window.LS_PEOPLE && window.LS_PEOPLE.eve && window.LS_PEOPLE.eve.name) || '我');
-    const msgs = [];
-    const quietE = (window.__lsSysEvt && (Date.now() - window.__lsSysEvt) < 3000) || (window.__lsRemoteEvt && (Date.now() - window.__lsRemoteEvt) < 3000);
-    if (title && title !== s.title) { if (!quietE) msgs.push(who + ' 播放了《' + title + '》' + (npArtist ? ' ' + npArtist : '')); }
-    else {
-      if (isPlaying !== s.playing && !quietE) msgs.push(who + (isPlaying ? ' 继续播放' : ' 暂停了') + (title ? ' 《' + title + '》' : ''));
-      if (pm !== s.mode) msgs.push(who + ' 切换到' + (pm === 'one' ? '单曲循环' : pm === 'shuffle' ? '随机播放' : '列表循环'));
-    }
-    s.title = title; s.playing = isPlaying; s.mode = pm;
-    const fresh = msgs.filter(t => !(s.lastSys && s.lastSys.t === t && (Date.now() - s.lastSys.ts) < 30000));
-    if (fresh.length) { s.lastSys = { t: fresh[fresh.length - 1], ts: Date.now() }; const sysMsgs = fresh.map(t => ({ who: 'sys', t: t, time: lsNow(), sys: true })); setChat(c => [...c, ...sysMsgs]); sysMsgs.forEach(bcast); }
-  }, [song && song.title, isPlaying, playMode]);
 
   // 新消息滚到底
   vUseEffect(() => { const el = chatRef.current; if (el) el.scrollTop = el.scrollHeight; }, [chat.length]);
@@ -992,7 +971,9 @@ function LSChatView({ tab, setTab, idx, setIdx, playing, setPlaying, ncmSong, nc
     const willLove = !lovedNow;
     if (setLoved) setLoved(willLove); else setLovedLocal(willLove);
     // 真实网易云歌：同步红心到「我喜欢的音乐」（取消也同步）
+    window.__lsActor = { who: 'user', t: Date.now() };
     if (song && song.id && /^\d+$/.test(String(song.id))) { try { fetch((window.__LS_API || '/api') + '/ncm/like?id=' + song.id + '&like=' + (willLove ? 1 : 0)).catch(function () {}); } catch (e) {} }
+    if (willLove && window.__lsRoomEvent && song && song.title) window.__lsRoomEvent('红心了《' + song.title + '》');
     if (willLove && song && song.id) {
       if (addToLib) { try { addToLib(song); } catch (e) {} }
       else { try { const st = window.__lsStore; if (st && st.library && !st.library.some(x => x.songId === song.id)) { st.library.unshift({ songId: song.id, title: song.title, artist: song.artist, cover: song.cover, pinned: false, notes: 0, last: Date.now() }); if (window.lsSaveStore) window.lsSaveStore(st); } } catch (e) {} }
@@ -1269,7 +1250,7 @@ function LSChatView({ tab, setTab, idx, setIdx, playing, setPlaying, ncmSong, nc
 }
 
 function LSDanmu({ idx }) {
-  const song = LS_SONGS[idx];
+  const song = LS_SONGS[idx] || window.LS_EMPTY_SONG;
   return (
     <div className="ls-danmu-wrap">
       <div className="cover-bg"><LSCover cover={song.cover} shape="rect" size={500} /></div>
@@ -1287,7 +1268,7 @@ function LSDanmu({ idx }) {
 
 // ════════════ 小组件画廊 ════════════
 function LSGalleryView({ idx, playing, setPlaying, onFocus }) {
-  const song = LS_SONGS[idx];
+  const song = LS_SONGS[idx] || window.LS_EMPTY_SONG;
   const toggle = () => setPlaying(p => !p);
   return (
     <div className="ls-body">
@@ -1319,7 +1300,7 @@ function LSFocusOverlay({ wid, idx, playing, setPlaying, onClose }) {
   const w = LS_WIDGETS.find(x => x.id === wid);
   if (!w) return null;
   const C = w.comp;
-  const song = LS_SONGS[idx];
+  const song = LS_SONGS[idx] || window.LS_EMPTY_SONG;
   return (
     <div className="ls-focus-mask" onClick={onClose}>
       <div className="ls-focus-inner" onClick={e => e.stopPropagation()}>
@@ -1337,7 +1318,7 @@ function LSSavePicker({ song, onClose }) {
   const songs = Array.isArray(song) ? song : [song];
   const ids = songs.map(function (s) { return s.id; }).join(',');
   vUseEffect(function () { fetch(base + '/ncm/playlists').then(function (r) { return r.json(); }).then(function (d) { setPls((d && d.playlists) || []); }).catch(function () { setPls([]); }); }, []);
-  const add = function (pl) { fetch(base + '/ncm/playlist-add?pid=' + pl.id + '&id=' + ids).then(function (r) { return r.json(); }).then(function (d) { setMsg((d && d.ok) ? ('已收藏到「' + pl.name + '」') : '收藏失败'); setTimeout(onClose, 1200); }).catch(function () { setMsg('收藏失败'); }); };
+  const add = function (pl) { fetch(base + '/ncm/playlist-add?pid=' + pl.id + '&id=' + ids).then(function (r) { return r.json(); }).then(function (d) { setMsg((d && d.ok) ? ('已收藏到「' + pl.name + '」') : '收藏失败'); if (d && d.ok && window.__lsRoomEvent && songs[0] && songs[0].title) window.__lsRoomEvent('把《' + songs[0].title + '》' + (songs.length > 1 ? ('等 ' + songs.length + ' 首') : '') + '收进了歌单「' + pl.name + '」'); setTimeout(onClose, 1200); }).catch(function () { setMsg('收藏失败'); }); };
   return (
     <div className="ls-savepick-mask" onClick={onClose}>
       <div className="ls-savepick" onClick={function (e) { e.stopPropagation(); }}>

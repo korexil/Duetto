@@ -28,32 +28,32 @@ function LSFMView({ onOpenSong, bump }) {
   };
   f2UseEffect(() => { if (logged) { setFm(null); loadFm(); } }, [logged]);
 
-  // 未登录：本地演示数据
-  const demoFm = (window.__lsStore.fm || []).filter(x => !x.disliked);
+  // 未登录不再展示演示 FM。
+  const localFm = (window.__lsStore.fm || []).filter(x => !x.disliked);
 
-  // 不喜欢 / 换一批：登录走真实网易云，未登录走本地演示
+  // 不喜欢 / 换一批：登录走真实网易云，未登录为空状态
   const dislikeReal = (it) => {
     fetch(LSAPI + '/ncm/fm-trash?id=' + encodeURIComponent(it.id)).catch(() => {});
     setFm(list => (list || []).filter(x => x.id !== it.id));
     setSynced('已少推这类 · 已同步'); setTimeout(() => setSynced(''), 1800);
   };
-  const dislikeDemo = (id) => { const s = window.__lsStore; const it = s.fm.find(x => x.id === id); if (it) it.disliked = true; lsSaveStore(s); setSynced('已少推这类 · 已同步'); setTimeout(() => setSynced(''), 1800); bump(); };
+  const dislikeLocal = (id) => { const s = window.__lsStore; const it = s.fm.find(x => x.id === id); if (it) it.disliked = true; lsSaveStore(s); setSynced('已少推这类 · 已同步'); setTimeout(() => setSynced(''), 1800); bump(); };
   const refillReal = () => { setSynced('换一批…'); setTimeout(() => setSynced(''), 1200); setFm(null); loadFm(); };
-  const refillDemo = () => { const s = window.__lsStore; s.fm.forEach(x => x.disliked = false); lsSaveStore(s); setSynced('换了一批'); setTimeout(() => setSynced(''), 1500); bump(); };
+  const refillLocal = () => { const s = window.__lsStore; s.fm.forEach(x => x.disliked = false); lsSaveStore(s); setSynced('换了一批'); setTimeout(() => setSynced(''), 1500); bump(); };
 
   const play = (song, list, i) => { if (window.__lsPlayNcm) window.__lsPlayNcm(song, list, i); else if (onOpenSong) onOpenSong(song); };
 
-  const list = logged ? fm : demoFm;
+  const list = logged ? fm : localFm;
   const openItem = (it, i) => { if (logged) play(it, list, i); else if (onOpenSong) onOpenSong(it); };
-  const dislike = (it) => (logged ? dislikeReal(it) : dislikeDemo(it.id));
-  const refill = logged ? refillReal : refillDemo;
+  const dislike = (it) => (logged ? dislikeReal(it) : dislikeLocal(it.id));
+  const refill = logged ? refillReal : refillLocal;
 
   return (
     <div className="ls-body">
       <div className="ls-arc-head"><div className="ls-arc-h">私人 FM<span>电台为你和 TA 挑的 · 听满 30 秒会记得你的偏好</span></div></div>
       {synced && <div className="ls-fm-sync">♪ {synced}</div>}
       <div className="ls-fm-list">
-        {list === null ? <LSEmpty t="调频中…" /> : list.length ? list.map((it, i) => (
+        {!logged ? <LSEmpty t="连接网易云后使用私人 FM" s="也可以在曲库直接搜索歌曲" /> : list === null ? <LSEmpty t="调频中…" /> : list.length ? list.map((it, i) => (
           <div className="ls-fm-item" key={it.id}>
             <span className="no">{String(i + 1).padStart(2, '0')}</span>
             <div className="cv" onClick={() => openItem(it, i)}><LSCover id={it.cover} cover={it.cover} shape="rounded" radius="9" size={100} /></div>
@@ -62,7 +62,7 @@ function LSFMView({ onOpenSong, bump }) {
           </div>
         )) : <LSEmpty t="这一批听完了" s="点下面换一批" />}
       </div>
-      <button className="ls-fm-refill" onClick={refill}>换一批 ↻</button>
+      {logged && <button className="ls-fm-refill" onClick={refill}>换一批 ↻</button>}
     </div>
   );
 }

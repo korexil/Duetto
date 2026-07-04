@@ -2,7 +2,7 @@
    底栏：此刻(播放) · 歌单(资料) · 曲库(搜索+日推+FM) · 一起听(档案+歌库+设置)。
    播放页：黑胶/卡片封面切换、滑动切纯歌词、队列、播放方式、问 Ta、详情抽屉。 */
 
-const { useState: aUseState, useEffect: aUseEffect } = React;
+const { useState: aUseState, useEffect: aUseEffect, useRef: aUseRef } = React;
 
 const LS_SKINS = [
   { id: 'ningzhi',  name: '凝脂',     po: 'cool cream',   bg: '#efece7', ac: '#b29a6e' },
@@ -13,7 +13,7 @@ const LS_SKINS = [
 ];
 
 var lsAudioEl = window.__lsAudioEl || (window.__lsAudioEl = new Audio());
-var LS_DEMO_SRC = ['https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3','https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3','https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3'];
+var LS_DEMO_SRC = [];
 function LSApp() {
   const [skin, setSkin] = aUseState(() => { let v = ''; try { v = localStorage.getItem('ls-skin') || ''; } catch (e) {} const mig = { yuebai: 'ningzhi', komorebi: 'douqing', shiliu: 'xueqing', rongyi: 'ouhe' }; if (mig[v]) { v = mig[v]; try { localStorage.setItem('ls-skin', v); } catch (e) {} } return v || 'ningzhi'; });
   const [customAc, setCustomAc] = aUseState(() => localStorage.getItem('ls-skin-custom') || '#c99bb0');
@@ -22,8 +22,8 @@ function LSApp() {
   const [view, setView] = aUseState('player');         // player | playlist | browse | together
   const [idx, setIdx]   = aUseState(0);
   const [playing, setPlaying] = aUseState(false);
-  const [cur, setCur]   = aUseState(31);
-  const [loved, setLoved] = aUseState(true);
+  const [cur, setCur]   = aUseState(0);
+  const [loved, setLoved] = aUseState(false);
   const [coverMode, setCoverMode] = aUseState(() => localStorage.getItem('ls-cover') || 'vinyl');
   const [playMode, setPlayMode] = aUseState(() => localStorage.getItem('ls-playmode') || 'loop');
   const [skinOpen, setSkinOpen] = aUseState(false);
@@ -131,6 +131,36 @@ function LSApp() {
     setNcmSong(q.list[ni]); setCur(0); setPlaying(true);
     loadNcm(q.list[ni]);
   };
+  // 全局房间事件出口：谁操作（用户/AI 4 秒标记）拼谁的昵称；房间开着就本地上屏，同时广播落库
+  window.__lsRoomEvent = (tail) => {
+    try {
+      const actor = window.__lsActor;
+      const isAI = actor && actor.who === 'ai' && (Date.now() - actor.t) < 4000;
+      const who = isAI ? ((window.LS_PEOPLE && window.LS_PEOPLE.yu && window.LS_PEOPLE.yu.name) || 'AI') : ((window.LS_PEOPLE && window.LS_PEOPLE.eve && window.LS_PEOPLE.eve.name) || '我');
+      const d0 = new Date(); const tm = (d0.getHours() < 10 ? '0' : '') + d0.getHours() + ':' + (d0.getMinutes() < 10 ? '0' : '') + d0.getMinutes();
+      const msg = { who: 'sys', t: who + ' ' + tail, time: tm, sys: true };
+      if (window.__lsRoomChatIn) window.__lsRoomChatIn(msg);
+      if (window.__LS_SYNC && window.__LS_SYNC.send) window.__LS_SYNC.send({ t: 'chat', msg });
+    } catch (e) {}
+  };
+  // App 级状态卡：播放/暂停/切歌/换模式——不管房间开没开，本页面的真实操作都记录（系统/远程同步事件除外）
+  const sysCardRef = aUseRef({ init: false });
+  aUseEffect(() => {
+    const s = sysCardRef.current;
+    const cur = (ncmQueue && ncmQueue.list && ncmQueue.list.length) ? ncmQueue.list[ncmQueue.idx] : (ncmSong || LS_SONGS[idx]);
+    const title = (cur && cur.title) || ''; const art = (cur && cur.artist) || ''; const pm = playMode || '';
+    if (!s.init) { s.init = true; s.title = title; s.playing = playing; s.mode = pm; return; }
+    const quiet = (window.__lsSysEvt && (Date.now() - window.__lsSysEvt) < 3000) || (window.__lsRemoteEvt && (Date.now() - window.__lsRemoteEvt) < 3000);
+    const msgs = [];
+    if (title && title !== s.title) { if (!quiet) msgs.push('播放了《' + title + '》' + (art ? ' ' + art : '')); }
+    else {
+      if (playing !== s.playing && !quiet) msgs.push((playing ? '继续播放' : '暂停了') + (title ? ' 《' + title + '》' : ''));
+      if (pm !== s.mode) msgs.push('切换到' + (pm === 'one' ? '单曲循环' : pm === 'shuffle' ? '随机播放' : '列表循环'));
+    }
+    s.title = title; s.playing = playing; s.mode = pm;
+    const fresh = msgs.filter(t => !(s.last && s.last.t === t && (Date.now() - s.last.ts) < 30000));
+    if (fresh.length) { s.last = { t: fresh[fresh.length - 1], ts: Date.now() }; fresh.forEach(t => window.__lsRoomEvent && window.__lsRoomEvent(t)); }
+  }, [ncmSong, ncmQueue, idx, playing, playMode]);
   // AI DJ 执行器：AI 回复里的 <<ACT>>{...}<<>> 经这里落到播放器
   window.__lsRunAction = (act) => {
     try {
@@ -156,7 +186,7 @@ function LSApp() {
       } else if (act.type === 'like') {
         var qv = window.__lsEv && window.__lsEv.ncmQueue;
         var cs = (qv && qv.list && qv.list[qv.idx]) || null;
-        if (cs && cs.id && /^\d+$/.test(String(cs.id))) fetch(base + '/ncm/like?id=' + cs.id + '&like=1').catch(function(){});
+        if (cs && cs.id && /^\d+$/.test(String(cs.id))) { fetch(base + '/ncm/like?id=' + cs.id + '&like=1').catch(function(){}); if (window.__lsRoomEvent && cs.title) window.__lsRoomEvent('红心了《' + cs.title + '》'); }
       } else if (act.type === 'queue') {
         if (act.query) {
           fetch(base + '/ncm/search?kw=' + encodeURIComponent(act.query))
@@ -192,7 +222,7 @@ function LSApp() {
   };
 
   // 播放模拟
-  aUseEffect(() => { if (ncmSong) return; var s = LS_SONGS[idx]; var src = (s && s.src) || LS_DEMO_SRC[idx % LS_DEMO_SRC.length]; if (lsAudioEl.src !== src) lsAudioEl.src = src; }, [idx, ncmSong]);
+  aUseEffect(() => { if (ncmSong) return; var s = LS_SONGS[idx]; var src = (s && s.src) || ''; if (src && lsAudioEl.src !== src) lsAudioEl.src = src; }, [idx, ncmSong]);
   // 暴露"当前在放的歌"给 AI 桥（claude-bridge 读 window.__lsNowPlaying 拼进提示词）
   aUseEffect(() => {
     var cur = (ncmQueue && ncmQueue.list && ncmQueue.list.length) ? ncmQueue.list[ncmQueue.idx] : (ncmSong || LS_SONGS[idx]);
@@ -210,6 +240,7 @@ function LSApp() {
         if (e.playMode === 'one') { try { lsAudioEl.currentTime = 0; lsAudioEl.play().catch(function(){}); } catch(er){} }
         else if (e.playNcmIdx) { var pfe = window.__lsPrefetch; e.playNcmIdx((pfe && pfe.idx != null) ? pfe.idx : (e.playMode === 'shuffle' ? Math.floor(Math.random()*e.ncmQueue.list.length) : e.ncmQueue.idx + 1)); }
       } else {
+        if (!LS_SONGS.length) { setPlaying(false); setCur(0); return; }
         setIdx(function(i){ return (e.playMode) === 'shuffle' ? Math.floor(Math.random()*LS_SONGS.length) : (i+1)%LS_SONGS.length; }); setCur(0);
       }
     };
@@ -301,7 +332,7 @@ function LSApp() {
   aUseEffect(() => {
     if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return;
     var ms = navigator.mediaSession;
-    var song = ncmSong || LS_SONGS[idx];
+    var song = ncmSong || LS_SONGS[idx] || window.LS_EMPTY_SONG;
     if (song && typeof MediaMetadata !== 'undefined') {
       try {
         var cov = String((song && song.cover) || '');
@@ -345,8 +376,8 @@ function LSApp() {
         {/* 视图 */}
         {view === 'player' && (
           <LSPlayerView {...{ idx, setIdx, playing, setPlaying, cur, setCur, loved, setLoved, coverMode, setCoverMode, playMode, cyclePlayMode, ncmSong, ncmLyric, ncmQueue, playNcmIdx }}
-            onOpenDrawer={(i) => { if (ncmSong) setNcmDrawerSong(ncmSong); else setDrawerIdx(i); }}
-            onPickLyric={(line) => setAsk({ song: LS_SONGS[idx], passage: line })}
+            onOpenDrawer={(i) => { if (ncmSong) setNcmDrawerSong(ncmSong); else if (LS_SONGS[i]) setDrawerIdx(i); }}
+            onPickLyric={(line) => setAsk({ song: LS_SONGS[idx] || window.LS_EMPTY_SONG, passage: line })}
             onOpenQueue={() => setQueueOpen(true)}
             onOpenComments={(s) => setCommentsSong(s)}
             onEnterRoom={() => setRoomOpen(true)} />
