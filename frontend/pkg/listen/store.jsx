@@ -19,7 +19,7 @@ function lsSeedStore() {
     archive: [],
     library: [
       { songId: 's1', title: '夜色温柔', artist: 'Aria', cover: 'ls-cover-1', pinned: true,  notes: 6, last: '昨天 23:14' },
-      { songId: 's4', title: 'komorebi',  artist: 'Sol', cover: 'ls-cover-4', pinned: false, notes: 2, last: 'Jun 10' },
+      { songId: 's4', title: '斜阳',  artist: 'Sol', cover: 'ls-cover-4', pinned: false, notes: 2, last: 'Jun 10' },
       { songId: 's2', title: '晴天预报',  artist: 'Marina',  cover: 'ls-cover-2', pinned: false, notes: 1, last: '前天 21:02' },
     ],
     fm: [
@@ -77,7 +77,6 @@ function lsFmtTs(v) {
   if (typeof v !== 'number') return v ? '早前' : '';
   const d = new Date(v), now = new Date();
   const hm = (d.getHours() < 10 ? '0' : '') + d.getHours() + ':' + (d.getMinutes() < 10 ? '0' : '') + d.getMinutes();
-  if (d.toDateString() === now.toDateString()) return hm;
   const y = d.getFullYear() === now.getFullYear() ? '' : (d.getFullYear() + '年');
   return y + (d.getMonth() + 1) + '月' + d.getDate() + '日 ' + hm;
 }

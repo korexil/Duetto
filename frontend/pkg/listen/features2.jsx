@@ -108,7 +108,7 @@ function LSAskBar({ song, passage, onClear, onSaved }) {
 
         {reply && (
           <div className="ls-ask-reply">
-            <span className="who">{FIcon.AI} AI</span>
+            <span className="who">{FIcon.AI} {(window.LS_PEOPLE && window.LS_PEOPLE.yu && window.LS_PEOPLE.yu.name) || 'TA'}</span>
             <p style={{ whiteSpace: 'pre-line' }}>{reply}</p>
             <div className="done">已记进听歌档案 ✓</div>
           </div>

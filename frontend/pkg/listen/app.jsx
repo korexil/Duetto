@@ -5,17 +5,17 @@
 const { useState: aUseState, useEffect: aUseEffect } = React;
 
 const LS_SKINS = [
-  { id: 'yuebai',   name: '月白',     po: 'cool cream',   bg: '#efece7', ac: '#b29a6e' },
-  { id: 'komorebi', name: '木漏れ日', po: 'sage light',   bg: '#eaede2', ac: '#8a9a6b' },
-  { id: 'shiliu',   name: '石榴',     po: 'misty violet', bg: '#f0f1fa', ac: '#8f93c9' },
-  { id: 'rongyi',   name: '绒翼',     po: 'soft rose',    bg: '#f5eef0', ac: '#c08c9b' },
+  { id: 'ningzhi',  name: '凝脂',     po: 'cool cream',   bg: '#efece7', ac: '#b29a6e' },
+  { id: 'douqing',  name: '豆青',     po: 'sage light',   bg: '#eaede2', ac: '#8a9a6b' },
+  { id: 'xueqing',  name: '雪青',     po: 'misty violet', bg: '#f0f1fa', ac: '#8f93c9' },
+  { id: 'ouhe',     name: '藕荷',     po: 'soft rose',    bg: '#f5eef0', ac: '#c08c9b' },
   { id: 'jilan',    name: '霁蓝',     po: 'misty blue',   bg: '#e9eef4', ac: '#7d9ac6' },
 ];
 
 var lsAudioEl = window.__lsAudioEl || (window.__lsAudioEl = new Audio());
 var LS_DEMO_SRC = ['https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3','https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3','https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3'];
 function LSApp() {
-  const [skin, setSkin] = aUseState(() => localStorage.getItem('ls-skin') || 'yuebai');
+  const [skin, setSkin] = aUseState(() => { let v = ''; try { v = localStorage.getItem('ls-skin') || ''; } catch (e) {} const mig = { yuebai: 'ningzhi', komorebi: 'douqing', shiliu: 'xueqing', rongyi: 'ouhe' }; if (mig[v]) { v = mig[v]; try { localStorage.setItem('ls-skin', v); } catch (e) {} } return v || 'ningzhi'; });
   const [customAc, setCustomAc] = aUseState(() => localStorage.getItem('ls-skin-custom') || '#c99bb0');
   const [customVars, setCustomVars] = aUseState(() => { try { return JSON.parse(localStorage.getItem('ls-skin-diy') || '{}'); } catch (e) { return {}; } });
   const [darkMode, setDarkMode] = aUseState(() => { try { return localStorage.getItem('ls-dark') === '1'; } catch (e) { return false; } });

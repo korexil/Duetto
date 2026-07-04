@@ -139,7 +139,7 @@ function LSSongDrawer({ song: songProp, ncmSong, ncmId, loved, onToggleLove, inL
                 return <div key={i} className="ll" style={askable ? { cursor: 'pointer' } : null}
                   onClick={() => askable && onAskAI(song, t)}>{l.line}</div>;
               })}
-              <div className="ls-empty" style={{ padding: '16px 0 0' }}><div className="e-s">点任意一句 → 引用给 AI</div></div>
+              <div className="ls-empty" style={{ padding: '16px 0 0' }}><div className="e-s">点任意一句 → 引用给 TA</div></div>
             </div> : null}
           </div>)}
 

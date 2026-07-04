@@ -50,10 +50,10 @@ const LS_SONGS = [
     ],
   },
   {
-    id: 's4', title: 'komorebi', artist: 'Sol', album: 'Daylight',
+    id: 's4', title: '斜阳', artist: 'Sol', album: 'Daylight',
     dur: 192, cover: 'ls-cover-4', tag: '阳光穿过树叶 落下斑驳的光点',
     lyrics: [
-      { t: 0,  line: '（纯音乐 · komorebi）' },
+      { t: 0,  line: '（纯音乐 · 斜阳）' },
       { t: 20, line: '· · ·' },
       { t: 50, line: '· · · · ·' },
     ],
@@ -106,7 +106,7 @@ const LS_RECENT = [
   { songId: 's3', when: '昨天', times: 7 },
   { songId: 's2', when: '前天', times: 4 },
 ];
-const LS_HOT = ['夜色温柔', 'komorebi', '晴天预报', '旧照片', '晚风', '雨的声音'];
+const LS_HOT = ['夜色温柔', '斜阳', '晴天预报', '旧照片', '晚风', '雨的声音'];
 
 // —— 歌单页：我的歌单 / 收藏歌单 ——
 const LS_PLAYLISTS = [
@@ -114,7 +114,7 @@ const LS_PLAYLISTS = [
   { id: 'pl_us',  name: '一起听的歌单', count: 42, cover: 'ls-cover-1', us: true, songs: ['s1','s4','s2'] },
   { id: 'pl_rain', name: '适合下雨天听', count: 23, cover: 'ls-cover-1', songs: ['s1','s3'] },
   { id: 'pl_night', name: '深夜 emo 现场', count: 41, cover: 'ls-cover-3', songs: ['s3','s2','s1'] },
-  { id: 'pl_komo', name: 'komorebi · 纯音乐', count: 16, cover: 'ls-cover-4', songs: ['s4','s1'] },
+  { id: 'pl_xy', name: '斜阳 · 纯音乐', count: 16, cover: 'ls-cover-4', songs: ['s4','s1'] },
 ];
 
 // 把秒格式化成 m:ss

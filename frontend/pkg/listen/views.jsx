@@ -823,7 +823,7 @@ function LSChatView({ tab, setTab, idx, setIdx, playing, setPlaying, ncmSong, nc
       ".ls-rtop .prog .track{flex:1;height:3px;border-radius:999px;background:var(--ls-line);overflow:hidden}",
       ".ls-rtop .prog .track i{display:block;height:100%;border-radius:999px;background:var(--ls-gold);width:0}",
       ".ls-rtop .prog .pp{width:30px;height:30px;border-radius:50%;flex-shrink:0;background:var(--ls-gold);color:var(--ls-panel);border:none;display:flex;align-items:center;justify-content:center;cursor:pointer}",
-      ".ls-skin-shiliu .ls-rtop .prog .pp{color:#1a1512}",
+      ".ls-skin-xueqing .ls-rtop .prog .pp{color:#1a1512}",
       ".ls-rtop .prog .pp svg{width:15px;height:15px;fill:currentColor}",
       ".ls-rtop-cass .head{display:grid;grid-template-columns:56px 1fr 56px;align-items:center;gap:10px}",
       ".ls-rtop-cass .reel{width:56px;height:56px;border-radius:50%;overflow:hidden;position:relative;border:7px solid color-mix(in srgb,var(--ls-ink) 14%,transparent);background:radial-gradient(circle,var(--ls-panel) 0 7px,var(--ls-panel2) 8px)}",
@@ -1095,7 +1095,7 @@ function LSChatView({ tab, setTab, idx, setIdx, playing, setPlaying, ncmSong, nc
                 {m.think ? <details className="lsr-think"><summary>💭 思考过程</summary><div className="tk">{m.think}</div></details> : null}
                 {(m.t || m.quote) ? <div className="lsr-bubble">{m.quote ? <div className="lsr-bq"><span className="bq-src">♪ {m.qsong || '歌词'}</span>{m.quote}</div> : null}{m.t}</div> : null}
                 {m.share && (<div className="lsr-share" onClick={() => playSharedNcm(m.share)}><div className="cv"><LSCover cover={m.share.cover} shape="rounded" radius={10} size={120} /></div><div className="mn"><div className="eb">{(self ? eveName : yuName) + ' · 分享'}</div><b>{m.share.title}</b><span>{m.share.artist}</span></div><button className="pl" onClick={(e) => { e.stopPropagation(); playSharedNcm(m.share); }}>{String(song.id) === String(m.share.id) && isPlaying ? <span className="eq2"><i></i><i></i><i></i></span> : LSIcon.play()}</button></div>)}
-                {s && (<div className="lsr-share" onClick={() => playShared(s)}><div className="cv"><LSCover cover={s.cover} shape="rounded" radius={10} size={120} /></div><div className="mn"><div className="eb">{self ? 'You · 分享' : 'AI · 分享'}</div><b>{s.title}</b><span>{s.artist}</span></div><button className="pl" onClick={(e) => { e.stopPropagation(); playShared(s); }}>{LSIcon.play()}</button></div>)}
+                {s && (<div className="lsr-share" onClick={() => playShared(s)}><div className="cv"><LSCover cover={s.cover} shape="rounded" radius={10} size={120} /></div><div className="mn"><div className="eb">{(self ? eveName : yuName) + ' · 分享'}</div><b>{s.title}</b><span>{s.artist}</span></div><button className="pl" onClick={(e) => { e.stopPropagation(); playShared(s); }}>{LSIcon.play()}</button></div>)}
                 {m.time ? <div className="lsr-time">{m.time}</div> : null}
               </div>
               {self && !hideAvas && (firstOfRun ? <div className="lsr-ava"><LSFace who="eve" /></div> : <div className="lsr-ava ghost"></div>)}
@@ -1127,6 +1127,8 @@ function LSChatView({ tab, setTab, idx, setIdx, playing, setPlaying, ncmSong, nc
         <div className="ls-rset-mask" onClick={() => setRoomSetOpen(false)}>
           <div className="ls-rset" onClick={e => e.stopPropagation()}>
             <div className="hd">房间设置</div>
+            <div className="row"><span>回复样式</span><div className="fcseg"><button className={replyMode !== 'stream' ? 'on' : ''} onClick={() => setRM('bubbles')}>分气泡</button><button className={replyMode === 'stream' ? 'on' : ''} onClick={() => setRM('stream')}>完整带思考</button></div></div>
+            <div className="row"><span>顶栏样式</span><div className="fcseg"><button className={cardStyle === 'full' ? 'on' : ''} onClick={() => { setCardStyle('full'); try { localStorage.setItem('ls-room-card', 'full'); } catch (e) {} }}>完整卡</button><button className={cardStyle === 'mini' ? 'on' : ''} onClick={() => { setCardStyle('mini'); try { localStorage.setItem('ls-room-card', 'mini'); } catch (e) {} }}>极简条</button></div></div>
             <div className="row"><span>悬浮球样式</span><div className="fcseg"><button className={ballStyle === 'island' ? 'on' : ''} onClick={() => { setBallStyle('island'); try { localStorage.setItem('ls-room-ball', 'island'); } catch (e) {} }}>灵动岛</button><button className={ballStyle === 'sheet' ? 'on' : ''} onClick={() => { setBallStyle('sheet'); try { localStorage.setItem('ls-room-ball', 'sheet'); } catch (e) {} }}>声波球</button></div></div>
             <div className="row"><span>隐藏播放状态卡片</span><button className={'tg' + (hideEvents ? ' on' : '')} onClick={() => setHideEvents(function (h) { const nh = !h; try { localStorage.setItem('ls-room-hideevt', nh ? '1' : '0'); } catch (e) {} return nh; })}></button></div>
             <div className="row"><span>隐藏气泡头像</span><button className={'tg' + (hideAvas ? ' on' : '')} onClick={toggleAvas}></button></div>
@@ -1156,8 +1158,6 @@ function LSChatView({ tab, setTab, idx, setIdx, playing, setPlaying, ncmSong, nc
               );
             })}
             {glass && <button className="bubreset" onClick={resetGlass}>界面恢复皮肤默认</button>}
-            <div className="row"><span>回复样式</span><div className="fcseg"><button className={replyMode !== 'stream' ? 'on' : ''} onClick={() => setRM('bubbles')}>分气泡</button><button className={replyMode === 'stream' ? 'on' : ''} onClick={() => setRM('stream')}>完整带思考</button></div></div>
-            <div className="row"><span>顶栏样式</span><div className="fcseg"><button className={cardStyle === 'full' ? 'on' : ''} onClick={() => { setCardStyle('full'); try { localStorage.setItem('ls-room-card', 'full'); } catch (e) {} }}>完整卡</button><button className={cardStyle === 'mini' ? 'on' : ''} onClick={() => { setCardStyle('mini'); try { localStorage.setItem('ls-room-card', 'mini'); } catch (e) {} }}>极简条</button></div></div>
             <div className="row"><span>房间背景</span><button className={'tg' + (bgOn ? ' on' : '')} onClick={toggleBg}></button></div>
             {bgOn && <div className="rbgset"><image-slot id="ls-room-bg" cap="3000" shape="rounded" radius="12" always-ctl="" tap-replace="" placeholder="点这里设置房间背景图"></image-slot></div>}
             <button className="done" onClick={() => setRoomSetOpen(false)}>完成</button>

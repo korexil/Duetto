@@ -408,7 +408,7 @@ function LSPlaylistView(props) {
         <div className="ls-deco">
           <div className="ls-skinrow">
             <button className={'sk sk-custom' + (skin === 'custom' ? ' on' : '')} title="自定义颜色" onClick={() => setSkin('custom')}><span className="sw" style={skin === 'custom' ? { background: customAc } : null}></span></button>
-            {[['yuebai', '月白'], ['komorebi', '木漏れ日'], ['shiliu', '石榴'], ['rongyi', '绒翼'], ['jilan', '霁蓝']].map(([k, l]) => (
+            {[['ningzhi', '凝脂'], ['douqing', '豆青'], ['xueqing', '雪青'], ['ouhe', '藕荷'], ['jilan', '霁蓝']].map(([k, l]) => (
               <button key={k} className={'sk sk-' + k + (skin === k ? ' on' : '')} onClick={() => setSkin(k)} title={l}><span className="sw"></span></button>
             ))}
           </div>
