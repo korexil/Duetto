@@ -70,6 +70,18 @@ your own. Each chat turn Duetto sends `{message, song, user, ai}` and injects th
   archive (plays, songs with cached lyrics and rolling memories, presence notes, analyses, room
   events) lives in SQLite via Node's built-in `node:sqlite`; JSON files hold only ephemeral state.
 
+## Updating
+
+```bash
+git pull
+npm install
+# restart the server (systemctl / pm2 / however you run it)
+```
+
+Your data is safe across updates — settings, PIN, and the SQLite archive all live under `data/`,
+which is gitignored and never touched by `git pull`. Tables are created with `IF NOT EXISTS`, so an
+existing database keeps working. Frontend assets are cache-busted by version, so users just refresh.
+
 ## Behind a reverse proxy
 
 Point your proxy at the server (default 4183), serve at your domain root, and **proxy `/ws`** for sync.
