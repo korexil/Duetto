@@ -12,8 +12,9 @@ const LS_SKINS = [
   { id: 'jilan',    name: '霁蓝',     po: 'misty blue',   bg: '#e9eef4', ac: '#7d9ac6' },
 ];
 
-var lsAudioEl = window.__lsAudioEl || (window.__lsAudioEl = (function(){ var a = document.createElement('audio'); a.preload = 'auto'; a.setAttribute('playsinline',''); a.setAttribute('webkit-playsinline',''); a.style.display='none'; try{ (document.body||document.documentElement).appendChild(a); }catch(e){} return a; })());
+var lsAudioEl = window.__lsAudioEl || (window.__lsAudioEl = (function(){ var a = document.createElement('audio');  a.preload = 'none'; a.setAttribute('playsinline',''); a.setAttribute('webkit-playsinline',''); a.style.display='none'; try{ (document.body||document.documentElement).appendChild(a); }catch(e){} return a; })());
 window.__lsAdv = window.__lsAdv || { list: null, idx: 0, kind: '', mode: 'loop', plan: [] };
+function lsMarkLoad(){ window.__lsInternalLoad = Date.now(); }
 function lsSetAdv(list, idx, kind){ var A = window.__lsAdv; A.list = list || null; A.idx = idx || 0; A.kind = kind || ''; A.plan = []; }
 function lsPrefetchNext(){
   var A = window.__lsAdv; if (!A || !A.list || !A.list.length || A.mode === 'one') return;
@@ -108,13 +109,13 @@ function LSApp() {
     setNcmLyric(''); setLoved(false);
 
     // 本地链接歌（用户在"本地"里自己添加的直链）：直接播，不走网易云
-    if (s && s.url) { lsAudioEl.src = s.url; playSoon(); logListen(s, s.url); lsPrefetchNext(); return; }
+    if (s && s.url) { lsMarkLoad(); lsAudioEl.src = s.url; playSoon(); logListen(s, s.url); lsPrefetchNext(); return; }
     // 预取命中：上一首快放完时已把这首的 URL 取好，切歌零 fetch —— 后台（锁屏）续播不断
     const pf = window.__lsPrefetch;
     const pmapUrl = (window.__lsPrefetchMap || {})[String(s.id)] || '';
     const hitUrl = (pf && String(pf.id) === String(s.id) && pf.url) || pmapUrl;
     if (hitUrl) {
-      lsAudioEl.src = hitUrl; playSoon();
+      lsMarkLoad(); lsAudioEl.src = hitUrl; playSoon();
       try { delete window.__lsPrefetchMap[String(s.id)]; } catch (e) {}
       logListen(s, hitUrl);
       window.__lsPrefetch = null;
@@ -122,7 +123,7 @@ function LSApp() {
       lsPrefetchNext();
       return;
     }
-    fetch(base + '/ncm/song-url?id=' + s.id).then(r => r.json()).then(d => { if (d && d.url) { lsAudioEl.src = d.url; playSoon(); logListen(s, d.url); } else { logListen(s, ''); } }).catch(function(){ logListen(s, ''); });
+    fetch(base + '/ncm/song-url?id=' + s.id).then(r => r.json()).then(d => { if (d && d.url) { lsMarkLoad(); lsAudioEl.src = d.url; playSoon(); logListen(s, d.url); } else { logListen(s, ''); } }).catch(function(){ logListen(s, ''); });
     fetch(base + '/ncm/lyric?id=' + s.id).then(r => r.json()).then(l => { window.__lsTLyric = (l && l.tlyric) || ''; setNcmLyric((l && l.lyric) || ''); }).catch(function(){});
     lsPrefetchNext();
   };
@@ -147,9 +148,13 @@ function LSApp() {
         if (shouldPlay) {
           const ni = (q.list || []).length;
           const ns = list[ni];
+          // 同步推进游标：新歌进 __lsAdv，切歌/续播/后台都以它为准
+          if (window.__lsAdv) { window.__lsAdv.list = list; window.__lsAdv.idx = ni; window.__lsAdv.kind = 'fm'; }
           if (ns) { setNcmSong(ns); setCur(0); setPlaying(true); loadNcm(ns); }
           return { ...q, list: list, idx: ni, kind: 'fm' };
         }
+        // 只是把批次续长：游标的 list 也跟着变长（idx 不动）
+        if (window.__lsAdv) { window.__lsAdv.list = list; window.__lsAdv.kind = 'fm'; }
         return { ...q, list: list, kind: 'fm' };
       });
     }).catch(function () { if (fmFetchRef.current.playAfterAppend) setPlaying(false); }).finally(function () { fmFetchRef.current.busy = false; fmFetchRef.current.playAfterAppend = false; });
@@ -330,7 +335,7 @@ function LSApp() {
     var add = (songs && songs.length) ? songs : (songs ? [songs] : []);
     if (!add.length) return;
     window.__lsPrefetch = null; window.__lsShufflePlan = [];
-    setNcmQueue(q => { var list = q ? [...q.list, ...add] : add; if (window.__lsAdv && window.__lsAdv.list) window.__lsAdv.list = list; return q ? { ...q, list: list } : { list: add, idx: 0 }; });
+    setNcmQueue(q => { var list = q ? [...q.list, ...add] : add; if (window.__lsAdv) { window.__lsAdv.list = list; window.__lsAdv.kind = ''; } return q ? { ...q, list: list, kind: '' } : { list: add, idx: 0, kind: '' }; });
   };
   // 队列弹窗用：替换真实队列，但不主动改播放进度/播放状态。
   window.__lsReplaceQueue = (songs, idx0) => {
@@ -375,6 +380,9 @@ function LSApp() {
       setIdx(function(i){ return (e.playMode) === 'shuffle' ? Math.floor(Math.random()*LS_SONGS.length) : (i+1)%LS_SONGS.length; }); setCur(0);
     };
     var onP = function(){
+      // 换源/自然 ended 会带一个 pause 事件——那不是用户/系统暂停，不能打断播放态（否则刚切的下一首被停）
+      if (Date.now() - (window.__lsInternalLoad || 0) < 3500) return;
+      if (lsAudioEl.ended) return;
       // React 认为在播、audio 却停了 = 系统中断（iOS 锁屏/来电/其它 app 抢占）：本地跟随，但标记来源，广播时跳过
       if (!window.__lsPlaying) return;
       window.__lsSysPause = Date.now(); window.__lsSysEvt = Date.now();

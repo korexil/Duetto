@@ -386,7 +386,7 @@ app.get('/api/listen-stats',async(q,r)=>{
   } catch(e) { r.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.use(express.static(path.join(rootDir,'frontend')));
+app.use(express.static(path.join(rootDir,'frontend'), { setHeaders: (res, fp) => { if (/\.(html|webmanifest)$/.test(fp)) res.setHeader('Cache-Control', 'no-cache, must-revalidate'); } }));
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 512 * 1024 });
 const rooms = new Map();
