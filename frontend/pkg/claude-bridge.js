@@ -25,6 +25,7 @@
     }
     var persona=(window.__lsStore&&window.__lsStore.persona)||'';
     if(persona)ai.persona=persona;
+    try{var st=(window.__lsStore&&window.__lsStore.style)||'';if(st)ai.style=st;}catch(e){}
     // 昵称与时间感知随每次请求带给后端（前端设置是唯一真相）
     try{var P=window.LS_PEOPLE;if(P){if(P.yu&&P.yu.name)ai.ai_name=P.yu.name;if(P.eve&&P.eve.name)ai.user_name=P.eve.name;}}catch(e){}
     try{ai.time_aware=localStorage.getItem('ls-room-timeaware')!=='0';}catch(e){}

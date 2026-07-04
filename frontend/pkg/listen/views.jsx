@@ -843,7 +843,7 @@ function LSChatView({ tab, setTab, idx, setIdx, playing, setPlaying, ncmSong, nc
       ".lsr-chat.noava .lsr-col{max-width:min(88%,360px)}",
       ".lsr-row.self .lsr-col{align-items:flex-end}",
       ".lsr-row.other .lsr-col{align-items:flex-start}",
-      ".lsr-bubble{max-width:100%;border-radius:20px;padding:7px 11px 8px;line-height:1.7;font-size:14px;font-family:var(--ls-cn);white-space:pre-wrap;overflow-wrap:anywhere}",
+      ".lsr-bubble{max-width:100%;border-radius:20px;padding:7px 11px 8px;line-height:1.7;font-size:13px;font-family:var(--ls-cn);white-space:pre-wrap;overflow-wrap:anywhere}",
       ".lsr-row.self .lsr-bubble{background:var(--lsr-bub-self,color-mix(in srgb, var(--ls-panel) 15%, #fff));color:var(--ls-ink);border:1px solid transparent;border-bottom-right-radius:6px;backdrop-filter:blur(var(--lsr-blur-self,0px));-webkit-backdrop-filter:blur(var(--lsr-blur-self,0px))}",
       ".lsr-row.other .lsr-bubble{background:var(--lsr-bub-other,color-mix(in srgb, var(--ls-bg) 15%, #fff));color:var(--ls-ink);border:1px solid transparent;border-bottom-left-radius:6px;backdrop-filter:blur(var(--lsr-blur-other,10px));-webkit-backdrop-filter:blur(var(--lsr-blur-other,10px))}",
       ".lsr-time{font-family:var(--ls-meta);font-size:9px;color:var(--ls-ink-faint);position:absolute;bottom:2px;white-space:nowrap}",

@@ -5,12 +5,45 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import ncm from 'NeteaseCloudMusicApi';
+import { DatabaseSync } from 'node:sqlite';
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const dataDir = process.env.LUCIOLA_DATA_DIR || path.join(rootDir, 'data');
 const settingsFile = path.join(dataDir, 'settings.json');
 const PORT = Number(process.env.PORT || 4183);
 const DEFAULTS = { user_name:'You', ai_name:'DJ', room_name:'Our Room', room_sub:'', ai:{base_url:'',api_key:'',model:'',persona:''}, show_gallery:true, avatar_url:'', ai_avatar_url:'', background_url:'', theme:'' };
 function getSettings(){ try{ const r=JSON.parse(fs.readFileSync(settingsFile,'utf8')); return {...DEFAULTS,...r,ai:{...DEFAULTS.ai,...(r.ai||{})}}; }catch(e){ return {...DEFAULTS}; } }
+// ═══ SQLite：长期档案（听歌流水/房间对话/歌曲分析/在场记录/印象）。JSON 只留瞬时状态（settings/cookie/封面缓存） ═══
+fs.mkdirSync(dataDir, { recursive: true });
+const db = new DatabaseSync(path.join(dataDir, 'listen.db'));
+db.exec(`
+CREATE TABLE IF NOT EXISTS plays(id TEXT, title TEXT, artist TEXT, dur INTEGER DEFAULT 0, cover TEXT DEFAULT '', bucket TEXT DEFAULT '', ts INTEGER);
+CREATE INDEX IF NOT EXISTS idx_plays_id ON plays(id);
+CREATE TABLE IF NOT EXISTS song_analysis(id TEXT PRIMARY KEY, title TEXT, artist TEXT, text TEXT, ts INTEGER);
+CREATE TABLE IF NOT EXISTS song_notes(song_id TEXT, title TEXT, artist TEXT, passage TEXT, thought TEXT, reply TEXT, ts INTEGER);
+CREATE INDEX IF NOT EXISTS idx_notes_song ON song_notes(song_id, ts);
+CREATE TABLE IF NOT EXISTS song_impressions(song_id TEXT, text TEXT, n INTEGER, ts INTEGER);
+CREATE INDEX IF NOT EXISTS idx_impr_song ON song_impressions(song_id, ts);
+CREATE TABLE IF NOT EXISTS room_events(room TEXT, msg TEXT, ts INTEGER);
+CREATE INDEX IF NOT EXISTS idx_events_room ON room_events(room, ts);
+`);
+(function migrateJsonl(){
+  const readF = (f) => { try { return fs.readFileSync(f,'utf8').trim().split('\n').map(l=>{ try{ return JSON.parse(l); }catch(e){ return null; } }).filter(Boolean); } catch(e) { return []; } };
+  const jobs = [
+    ['listen-log.jsonl', 'INSERT INTO plays(id,title,artist,dur,cover,bucket,ts) VALUES(?,?,?,?,?,?,?)', e=>[String(e.id||''),e.title||'',e.artist||'',Number(e.dur)||0,e.cover||'',e.bucket||'',e.ts||0]],
+    ['song-analysis.jsonl', 'INSERT OR REPLACE INTO song_analysis(id,title,artist,text,ts) VALUES(?,?,?,?,?)', e=>[String(e.id||''),e.title||'',e.artist||'',e.text||'',e.ts||0]],
+    ['song-notes.jsonl', 'INSERT INTO song_notes(song_id,title,artist,passage,thought,reply,ts) VALUES(?,?,?,?,?,?,?)', e=>[String(e.id||''),e.title||'',e.artist||'',e.passage||'',e.thought||'',e.reply||'',e.ts||0]],
+    ['song-impressions.jsonl', 'INSERT INTO song_impressions(song_id,text,n,ts) VALUES(?,?,?,?)', e=>[String(e.id||''),e.text||'',Number(e.n)||0,e.ts||0]],
+    ['room-events.jsonl', 'INSERT INTO room_events(room,msg,ts) VALUES(?,?,?)', e=>[String(e.room||'main'),JSON.stringify(e.msg||{}),e.ts||0]],
+  ];
+  for (const [fname, sql, map] of jobs) {
+    const f = path.join(dataDir, fname);
+    if (!fs.existsSync(f)) continue;
+    const st = db.prepare(sql); let n = 0;
+    for (const e of readF(f)) { try { st.run(...map(e)); n++; } catch(err){} }
+    fs.renameSync(f, f + '.migrated');
+    console.log('[migrate]', fname, n, 'rows');
+  }
+})();
 const app=express();
 app.use(express.json({limit:'2mb'}));
 app.get('/api/health',(_q,r)=>r.json({ok:true,mode:'self-host',version:'0.2.0'}));
@@ -18,12 +51,12 @@ app.get('/api/config',(_q,r)=>{ const s=getSettings(); r.json({ok:true,config:{c
 app.get('/api/settings',(_q,r)=>{ const s=getSettings(); const out={...s,ai:{...s.ai}}; if(out.ai.api_key){ out.ai.has_key=true; out.ai.key_hint='****'+String(out.ai.api_key).slice(-4); out.ai.api_key=''; } if(out.ai.a_key){ out.ai.has_a_key=true; out.ai.a_key=''; } r.json({ok:true,settings:out}); });
 app.post('/api/settings',(q,r)=>{ try{ const cur=getSettings(); const b=q.body||{}; const bai={...(b.ai||{})}; if(!bai.api_key||/^\*/.test(bai.api_key))delete bai.api_key; if(!bai.a_key||/^\*/.test(bai.a_key))delete bai.a_key; delete bai.has_key; delete bai.key_hint; delete bai.has_a_key; const next={...cur,...b,ai:{...cur.ai,...bai}}; fs.mkdirSync(dataDir,{recursive:true}); const tmp=settingsFile+'.tmp'; fs.writeFileSync(tmp,JSON.stringify(next,null,2)); fs.renameSync(tmp,settingsFile); r.json({ok:true,settings:next}); }catch(e){ r.status(500).json({ok:false,error:e.message}); } });
 app.post('/api/models',async(q,r)=>{ try{ const {base_url,api_key}=q.body||{}; if(!base_url)return r.status(400).json({ok:false,error:'base_url required'}); const base=String(base_url).replace(/\/+$/,''); const rr=await fetchT(base+'/models',{headers:api_key?{Authorization:'Bearer '+api_key}:{}},15000); if(!rr.ok){const t=await rr.text().catch(()=>'');return r.status(502).json({ok:false,error:'models '+rr.status+': '+t.slice(0,200)});} const d=await rr.json(); const arr=Array.isArray(d)?d:(d.data||d.models||[]); r.json({ok:true,models:arr.map(m=>typeof m==='string'?m:(m.id||m.name||m.model||'')).filter(Boolean).sort((a,b)=>a.localeCompare(b,'zh-Hans-CN'))}); }catch(e){ r.status(500).json({ok:false,error:e.message}); } });
-function mergeAi(base,over){ const out={...base}; if(over&&typeof over==='object'){ for(const k of ['model','persona','ai_name','user_name','time_aware','a_model']){ const v=over[k]; if(v!==undefined&&v!==null&&v!=='')out[k]=v; } if(over.base_url&&over.api_key){ out.base_url=over.base_url; out.api_key=over.api_key; } if(over.a_base&&over.a_key){ out.a_base=over.a_base; out.a_key=over.a_key; } } return out; }
+function mergeAi(base,over){ const out={...base}; if(over&&typeof over==='object'){ for(const k of ['model','persona','style','ai_name','user_name','time_aware','a_model']){ const v=over[k]; if(v!==undefined&&v!==null&&v!=='')out[k]=v; } if(over.base_url&&over.api_key){ out.base_url=over.base_url; out.api_key=over.api_key; } if(over.a_base&&over.a_key){ out.a_base=over.a_base; out.a_key=over.a_key; } } return out; }
 function timeBucket(h){ if(h<5)return '深夜'; if(h<9)return '清晨'; if(h<12)return '上午'; if(h<14)return '午间'; if(h<18)return '下午'; if(h<23)return '晚上'; return '深夜'; }
 function sysPrompt(s,kind,np){ const who=s.ai.ai_name||s.ai_name||'DJ',partner=s.ai.user_name||s.user_name||'You'; const scene=kind==='book'?'一起读书':'一起听歌';
  // 稳定前缀在前（persona/身份/格式/DJ 指令），会变的时间与"正在播"放最后 —— 中转的前缀缓存才能命中
  const ident='你叫'+who+'，正在和'+partner+scene+'。';
- const fmt='用自然的口语回复，可以带（动作/神态）的小描写；不要分点、不要标签、不要解释你的格式。你的整个回复输出成一个 JSON 数组，每个元素是一条独立的聊天气泡，像在聊天软件里连着发消息那样：["第一条","第二条"]。通常 1-4 条，每条一两句话；只输出这个数组本身，别的什么都不要。';
+ const fmt='用自然的口语回复；不要分点、不要标签、不要解释你的格式。你的整个回复输出成一个 JSON 数组，每个元素是一条独立的聊天气泡，像在聊天软件里连着发消息那样：["第一条","第二条"]。通常 1-4 条，每条一两句话；只输出这个数组本身，别的什么都不要。';
  const dj='你可以控制播放器。当你想放某首歌/切歌/暂停/继续时，把这个指令作为数组的最后一个元素单独输出：<<ACT>>{"type":"play","query":"歌名 歌手"}<<>>（play 需要 query；下一首用 type:"next"、上一首 "prev"、暂停 "pause"、继续 "resume"，这些不需要 query）。想把一首歌推荐给对方但不打断当前播放时，同样作为数组最后一个元素输出：<<ACT>>{"type":"share","query":"歌名 歌手"}<<>>；分享当前正在放的这首用 {"type":"share"}（不带 query），会在房间里弹出分享卡片。正常聊天时不要输出 ACT，也不要解释这个格式。';
  let timeLine='';
  if(s.ai.time_aware!==false&&String(s.ai.time_aware)!=='false'){ try{ const now=new Date(); const cn=now.toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false,month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}); const h=Number(now.toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false,hour:'2-digit'})); timeLine='现在是'+cn+'（'+timeBucket(h)+'）。'; }catch(e){} }
@@ -36,14 +69,14 @@ function sysPrompt(s,kind,np){ const who=s.ai.ai_name||s.ai_name||'DJ',partner=s
    if(np.impression) nowLine+='\n[这首歌的印象 · 你们一起听它的回忆]\n'+np.impression;
    else if(np.notes&&np.notes.length) nowLine+='\n[这首歌最近的在场记录]\n'+np.notes.map(n=>'- '+(n.passage?('歌词「'+n.passage+'」'):'')+(n.thought?(' 她说：'+n.thought):'')+(n.reply?(' 你回：'+String(n.reply).slice(0,80)):'')).join('\n');
  }
- return [s.ai.persona,ident,fmt,dj,timeLine,nowLine].filter(Boolean).join('\n\n'); }
+ const styleLine=s.ai.style?('对话风格（用户设定，按这个方式说话）：'+s.ai.style):''; return [s.ai.persona,styleLine,ident,fmt,dj,timeLine,nowLine].filter(Boolean).join('\n\n'); }
 // —— 在场记录（问Ta 的问答挂歌落库）与"印象"（记录满 6 条滚动总结成回忆） ——
 const notesFile = path.join(dataDir, 'song-notes.jsonl');
 const imprFile = path.join(dataDir, 'song-impressions.jsonl');
 function readJsonl(file){ try { return fs.readFileSync(file,'utf8').trim().split('\n').map(l=>{ try{ return JSON.parse(l); }catch(e){ return null; } }).filter(Boolean); } catch(e) { return []; } }
-function readNotes(sid, limit){ const all=readJsonl(notesFile).filter(n=>String(n.id)===sid); return limit?all.slice(-limit):all; }
-function readImpression(sid){ const all=readJsonl(imprFile).filter(n=>String(n.id)===sid); return all.length?all[all.length-1]:null; }
-function countPlays(sid){ return readJsonl(listenFile).filter(e=>String(e.id)===sid).length; }
+function readNotes(sid, limit){ try { const rows = db.prepare('SELECT song_id AS id,title,artist,passage,thought,reply,ts FROM song_notes WHERE song_id=? ORDER BY ts DESC, rowid DESC' + (limit ? ' LIMIT ' + Number(limit) : '')).all(String(sid)); return rows.reverse(); } catch(e){ return []; } }
+function readImpression(sid){ try { return db.prepare('SELECT song_id AS id,text,n,ts FROM song_impressions WHERE song_id=? ORDER BY ts DESC, rowid DESC LIMIT 1').get(String(sid)) || null; } catch(e){ return null; } }
+function countPlays(sid){ try { const r = db.prepare('SELECT COUNT(*) AS c FROM plays WHERE id=?').get(String(sid)); return (r && r.c) || 0; } catch(e){ return 0; } }
 const IMPRESSION_EVERY = 6; // 在场记录每满 6 条，滚动总结一次印象
 const _imBusy = {};
 function maybeImpress(s, sid, title, artist){
@@ -61,12 +94,12 @@ function maybeImpress(s, sid, title, artist){
         let head = '把下面这些「你和她一起听《' + (title || '') + '》' + (artist ? ('—' + artist) : '') + '时的片段」揉成一段150字内的第一人称回忆印象：写你俩和这首歌的故事、她被哪些句子戳到、情绪的流变。温柔具体有质感，直接出正文，不要分点、不要标签。';
         if (impr && impr.text) head += '\n这是之前的印象，在它基础上自然续写，别推翻：\n' + impr.text;
         const text = await callLLM(withAnalysisAi(s), [{ role: 'system', content: head }, { role: 'user', content: '新片段：\n' + lines }]);
-        if (text) { fs.mkdirSync(dataDir,{recursive:true}); fs.appendFileSync(imprFile, JSON.stringify({ id: sid, text, n: notes.length, ts: Date.now() }) + '\n'); }
+        if (text) { db.prepare('INSERT INTO song_impressions(song_id,text,n,ts) VALUES(?,?,?,?)').run(sid, text, notes.length, Date.now()); }
       } catch(e){} finally { delete _imBusy[sid]; }
     })();
   } catch(e){}
 }
-app.post('/api/song-note',(q,r)=>{ try{ const b=q.body||{}; const sid=String(b.id||''); if(!sid) return r.json({ok:false}); fs.mkdirSync(dataDir,{recursive:true}); fs.appendFileSync(notesFile, JSON.stringify({ id:sid, title:String(b.title||''), artist:String(b.artist||''), passage:String(b.passage||''), thought:String(b.thought||''), reply:String(b.reply||''), ts:Date.now() })+'\n'); const s0=getSettings(); const s2={...s0, ai:mergeAi(s0.ai, b.ai)}; if(s2.ai.api_key) maybeImpress(s2, sid, b.title, b.artist); r.json({ok:true}); }catch(e){ r.status(500).json({ok:false,error:e.message}); } });
+app.post('/api/song-note',(q,r)=>{ try{ const b=q.body||{}; const sid=String(b.id||''); if(!sid) return r.json({ok:false}); db.prepare('INSERT INTO song_notes(song_id,title,artist,passage,thought,reply,ts) VALUES(?,?,?,?,?,?,?)').run(sid, String(b.title||''), String(b.artist||''), String(b.passage||''), String(b.thought||''), String(b.reply||''), Date.now()); const s0=getSettings(); const s2={...s0, ai:mergeAi(s0.ai, b.ai)}; if(s2.ai.api_key) maybeImpress(s2, sid, b.title, b.artist); r.json({ok:true}); }catch(e){ r.status(500).json({ok:false,error:e.message}); } });
 function fmtSec(x){ x=Math.max(0,Math.floor(Number(x)||0)); return Math.floor(x/60)+':'+String(x%60).padStart(2,'0'); }
 // 组装"正在播"的完整上下文：进度 / 播放次数 / 歌曲分析 / 印象（或在场记录）
 function enrichNp(s, np){
@@ -127,14 +160,8 @@ async function callLLM(s,messages,over){ const base=String(s.ai.base_url||'').re
 app.post('/api/chat',async(q,r)=>{ try{ const s0=getSettings(); const bb=q.body||{}; const s={...s0, ai:mergeAi(s0.ai,bb.ai)}; if(!s.ai.api_key)return r.status(503).json({ok:false,error:'AI not set up: open the Model tab and add your endpoint + key'}); const {kind='music',prompt='',history=[],nowPlaying=null}=q.body||{}; const np=nowPlaying||(bb.ai&&bb.ai.nowPlaying)||null; const past=Array.isArray(history)?history.slice(-12).filter(m=>m&&m.role&&typeof m.content==='string'):[]; if(np){ enrichNp(s,np); } const raw=await callLLM(s,[{role:'system',content:sysPrompt(s,kind,np)},...past,{role:'user',content:String(prompt)}]); const reply=parseReplies(raw).join('\n'); r.json({ok:true,reply}); }catch(e){ r.status(e.status||500).json({ok:false,error:e.message}); } });
 // —— Song analysis: cached per song id (data/song-analysis.jsonl) so each song is analyzed once ——
 const analysisFile = path.join(dataDir, 'song-analysis.jsonl');
-function readAnalysis(sid){
-  try {
-    const lines = fs.readFileSync(analysisFile,'utf8').trim().split('\n');
-    for (let i = lines.length - 1; i >= 0; i--) { try { const e = JSON.parse(lines[i]); if (String(e.id) === sid && e.text) return e; } catch(err){} }
-  } catch(e){}
-  return null;
-}
-function appendAnalysis(e){ try { fs.mkdirSync(dataDir,{recursive:true}); fs.appendFileSync(analysisFile, JSON.stringify(e) + '\n'); } catch(err){} }
+function readAnalysis(sid){ try { return db.prepare("SELECT id,title,artist,text,ts FROM song_analysis WHERE id=? AND text!=''").get(String(sid)) || null; } catch(e){ return null; } }
+function appendAnalysis(e){ try { db.prepare('INSERT OR REPLACE INTO song_analysis(id,title,artist,text,ts) VALUES(?,?,?,?,?)').run(String(e.id||''), e.title||'', e.artist||'', e.text||'', e.ts||Date.now()); } catch(err){} }
 app.post('/api/song-analysis',async(q,r)=>{ try{ const s0=getSettings(); const bb=q.body||{}; const s=(bb.ai&&bb.ai.api_key)?{...s0,ai:mergeAi(s0.ai,bb.ai)}:{...s0,ai:mergeAi(s0.ai,{ai_name:bb.ai&&bb.ai.ai_name,user_name:bb.ai&&bb.ai.user_name,persona:bb.ai&&bb.ai.persona,time_aware:bb.ai&&bb.ai.time_aware})}; if(!s.ai.api_key)return r.json({ok:true,text:''}); const {title='',artist=''}=bb; const sid=String(bb.id||''); if(sid){ const hit=readAnalysis(sid); if(hit) return r.json({ok:true,text:hit.text,cached:true}); } const lrc=String(bb.lrc||'').slice(0,6000); const lyrArr=Array.isArray(bb.lyrics)?bb.lyrics.map(l=>typeof l==='string'?l:(l&&(l.line||l.text))||'').filter(Boolean).join('\n'):''; const lyr=lrc||lyrArr; const text=parseReplies(await callLLM(s,[{role:'system',content:sysPrompt(s,'music',{title,artist})+'\n\n她刚放了这首歌，你认真听完了。写1-3句听后感，像随口说给她听的，温柔具体有质感；可以引用扎到你的那句歌词。歌词每行行首的[分:秒]是时间轴，只用来感受歌的推进，回复里不要出现时间戳。直接出正文，不要分点、不要标签、不要 JSON 数组。'},{role:'user',content:'歌：'+title+(artist?(' — '+artist):'')+(lyr?('\n完整歌词：\n'+lyr):'')}])).join('\n'); if(sid&&text) appendAnalysis({id:sid,title,artist,text,ts:Date.now()}); r.json({ok:true,text}); }catch(e){ r.status(e.status||500).json({ok:false,error:e.message}); } });
 // —— NetEase Cloud Music: real QR login ——
 const ncmCookieFile = path.join(dataDir, 'ncm-cookie.txt');
@@ -167,41 +194,40 @@ app.get('/api/ncm/like', async (q,r)=>{ try{ await ncm.like({ id:q.query.id, lik
 app.get('/api/ncm/likelist', async (_q,r)=>{ try{ const p=await ncmProfile(); if(!p) return r.json({ok:true,logged:false,ids:[]}); const ll=await ncm.likelist({ uid:p.userId, cookie:ncmCookie }); r.json({ ok:true, ids:(ll.body&&ll.body.ids)||[] }); }catch(e){ r.status(500).json({ok:false,error:String(e.message||e)}); } });
 // —— Room timeline persistence: append-only JSONL, zero deps ——
 const eventsFile = path.join(dataDir, 'room-events.jsonl');
-function appendEvent(ev){ try { fs.mkdirSync(dataDir,{recursive:true}); fs.appendFileSync(eventsFile, JSON.stringify(ev) + '\n'); } catch(e){} }
-function readEvents(room, limit){
-  try {
-    const lines = fs.readFileSync(eventsFile,'utf8').trim().split('\n');
-    const out = [];
-    for (let i = lines.length - 1; i >= 0 && out.length < limit; i--) {
-      try { const e = JSON.parse(lines[i]); if (e.room === room && e.msg) out.push(e.msg); } catch(err){}
-    }
-    return out.reverse();
-  } catch(e) { return []; }
-}
+function appendEvent(ev){ try { db.prepare('INSERT INTO room_events(room,msg,ts) VALUES(?,?,?)').run(String(ev.room||'main'), JSON.stringify(ev.msg||{}), ev.ts||Date.now()); } catch(e){} }
+function readEvents(room, limit){ try { const rows = db.prepare('SELECT msg FROM room_events WHERE room=? ORDER BY ts DESC, rowid DESC LIMIT ?').all(String(room), Number(limit)||120); return rows.map(r=>{ try{ return JSON.parse(r.msg); }catch(e){ return null; } }).filter(Boolean).reverse(); } catch(e) { return []; } }
 app.get('/api/room/events', (q,r)=>{ const room=String(q.query.room||'main'); const limit=Math.min(300, Number(q.query.limit)||120); r.json({ ok:true, events: readEvents(room, limit) }); });
 
 // —— Listening log: structured play history (luciola-style time buckets) ——
 const listenFile = path.join(dataDir, 'listen-log.jsonl');
-app.post('/api/listen-log',(q,r)=>{ try{ const b=q.body||{}; if(!b.title&&!b.id) return r.json({ok:false}); const now=Date.now(); let h=12; try{ h=Number(new Date().toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false,hour:'2-digit'})); }catch(e){} fs.mkdirSync(dataDir,{recursive:true}); fs.appendFileSync(listenFile, JSON.stringify({ id:String(b.id||''), title:String(b.title||''), artist:String(b.artist||''), dur:Number(b.dur)||0, bucket:timeBucket(h), ts:now })+'\n'); r.json({ok:true}); }catch(e){ r.status(500).json({ok:false,error:e.message}); } });
-app.get('/api/listen-log',(q,r)=>{ try{ const limit=Math.min(500, Number(q.query.limit)||100); let lines=[]; try{ lines=fs.readFileSync(listenFile,'utf8').trim().split('\n'); }catch(e){} const out=[]; for(let i=lines.length-1;i>=0&&out.length<limit;i--){ try{ out.push(JSON.parse(lines[i])); }catch(err){} } r.json({ok:true,plays:out}); }catch(e){ r.status(500).json({ok:false,error:e.message}); } });
+app.post('/api/listen-log',(q,r)=>{ try{ const b=q.body||{}; if(!b.title&&!b.id) return r.json({ok:false}); const now=Date.now(); let h=12; try{ h=Number(new Date().toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false,hour:'2-digit'})); }catch(e){} db.prepare('INSERT INTO plays(id,title,artist,dur,cover,bucket,ts) VALUES(?,?,?,?,?,?,?)').run(String(b.id||''), String(b.title||''), String(b.artist||''), Number(b.dur)||0, String(b.cover||''), timeBucket(h), now); r.json({ok:true}); }catch(e){ r.status(500).json({ok:false,error:e.message}); } });
+app.get('/api/listen-log',(q,r)=>{ try{ const limit=Math.min(500, Number(q.query.limit)||100); const out=db.prepare('SELECT id,title,artist,dur,cover,bucket,ts FROM plays ORDER BY ts DESC, rowid DESC LIMIT ?').all(limit); r.json({ok:true,plays:out}); }catch(e){ r.status(500).json({ok:false,error:e.message}); } });
 
 // —— 听歌档案：每首歌的聚合（次数/首末时间/听后印象）+ 总览（总量/时段分布/常听排行） ——
-app.get('/api/listen-stats',(q,r)=>{
+const coverCacheFile = path.join(dataDir, 'cover-cache.json');
+let _coverCache = null;
+function loadCoverCache(){ if(_coverCache) return _coverCache; try{ _coverCache = JSON.parse(fs.readFileSync(coverCacheFile,'utf8')); }catch(e){ _coverCache = {}; } return _coverCache; }
+async function fillCovers(items){
+  const cache = loadCoverCache();
+  for (const t of items) { if (!t.cover && t.id && cache[t.id]) t.cover = cache[t.id]; }
+  const need = [...new Set(items.filter(t => !t.cover && t.id && /^\d+$/.test(String(t.id))).map(t => String(t.id)))].slice(0, 60);
+  if (!need.length) return;
   try {
-    let lines = []; try { lines = fs.readFileSync(listenFile,'utf8').trim().split('\n'); } catch(e){}
-    const songs = {}, buckets = {}; let total = 0;
-    for (const ln of lines) {
-      let e; try { e = JSON.parse(ln); } catch(err) { continue; }
-      if (!e || !e.title) continue; total++;
-      const k = String(e.id || e.title);
-      if (!songs[k]) songs[k] = { id: String(e.id || ''), title: e.title, artist: e.artist || '', plays: 0, first: e.ts, last: e.ts };
-      const g = songs[k]; g.plays++; if (e.ts < g.first) g.first = e.ts; if (e.ts > g.last) g.last = e.ts;
-      if (e.bucket) buckets[e.bucket] = (buckets[e.bucket] || 0) + 1;
-    }
-    const arr = Object.values(songs);
+    const d = await ncm.song_detail({ ids: need.join(','), cookie: ncmCookie });
+    for (const s of ((d.body && d.body.songs) || [])) { const u = s.al && s.al.picUrl; if (u) cache[String(s.id)] = u; }
+    fs.mkdirSync(dataDir, { recursive: true }); fs.writeFileSync(coverCacheFile, JSON.stringify(cache));
+    for (const t of items) { if (!t.cover && cache[t.id]) t.cover = cache[t.id]; }
+  } catch(e) { console.log('[covers err]', e.message); }
+}
+app.get('/api/listen-stats',async(q,r)=>{
+  try {
+    const arr = db.prepare("SELECT COALESCE(NULLIF(id,''),title) AS gk, MAX(id) AS id, title, MAX(artist) AS artist, MAX(cover) AS cover, COUNT(*) AS plays, MIN(ts) AS first, MAX(ts) AS last FROM plays WHERE title!='' GROUP BY gk").all();
+    const buckets = {}; for (const b of db.prepare("SELECT bucket, COUNT(*) AS c FROM plays WHERE bucket!='' GROUP BY bucket").all()) buckets[b.bucket] = b.c;
+    const total = (db.prepare("SELECT COUNT(*) AS c FROM plays WHERE title!=''").get() || {}).c || 0;
     const top = arr.slice().sort((a,b)=>b.plays-a.plays).slice(0, 30);
     for (const t of top) { if (t.id) { const a = readAnalysis(t.id); if (a) t.vibe = a.text; } }
     const recent = arr.slice().sort((a,b)=>b.last-a.last).slice(0, 30);
+    await fillCovers(top.concat(recent));
     r.json({ ok: true, total, distinct: arr.length, buckets, top, recent });
   } catch(e) { r.status(500).json({ ok: false, error: e.message }); }
 });

@@ -39,6 +39,7 @@ function lsLoadStore() {
   // 容错补全字段
   s.archive = s.archive || []; s.library = s.library || []; s.fm = s.fm || [];
   s.model = s.model || {};
+  if (s.style === undefined) s.style = '';
   if (!s.model.chat) s.model.chat = (s.model.name !== undefined && s.model.name !== null && s.model.chat === undefined && !s.model.analysis) ? { name: s.model.name || '', endpoint: s.model.endpoint || '', key: s.model.key || '' } : (s.model.chat || { name: '', endpoint: '', key: '' });
   if (!s.model.analysis) s.model.analysis = { name: '', endpoint: '', key: '' };
   if (s.model.analysis.name === 'google/gemini-2.5-flash' && !s.model.analysis.endpoint) s.model.analysis.name = '';
