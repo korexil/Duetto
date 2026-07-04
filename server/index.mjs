@@ -97,7 +97,7 @@ async function assertPublicUrl(urlStr, { allowHttp=false } = {}){
   for(const a of addrs){ if(isPrivateIp(a.address)) throw new Error('resolves to private address'); }
 }
 // 有大小上限+超时的流式下载（防内存爆/慢速挂起）；redirect:'error' 防跨主机跳转绕过 SSRF 检查
-async function fetchCapped(urlStr, { maxBytes=30*1024*1024, timeoutMs=60000, headers={} } = {}){
+async function fetchCapped(urlStr, { maxBytes=100*1024*1024, timeoutMs=90000, headers={} } = {}){
   const ac=new AbortController(); const t=setTimeout(()=>ac.abort(), timeoutMs);
   try {
     const rr=await fetch(urlStr,{ headers, redirect:'error', signal:ac.signal });
@@ -247,7 +247,7 @@ function ensureAnalysis(s, np){
           if (!aurl && /^\d+$/.test(sid)) aurl = 'https://music.163.com/song/media/outer/url?id=' + sid + '.mp3';
           if (aurl) {
             await assertPublicUrl(aurl, { allowHttp: true }); // 拦内网地址：SSRF 防线
-            const { buf, ct, finalUrl } = await fetchCapped(aurl, { maxBytes: 30*1024*1024, timeoutMs: 60000, headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://music.163.com/' } });
+            const { buf, ct, finalUrl } = await fetchCapped(aurl, { maxBytes: 100*1024*1024, timeoutMs: 90000, headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://music.163.com/' } });
             const isAudio = buf.length > 20000 && !String(finalUrl).includes('/404') && (ct.includes('audio') || ct.includes('mpeg') || ct.includes('octet-stream') || buf.slice(0, 3).toString() === 'ID3' || (buf[0] === 0xFF && (buf[1] & 0xE0) === 0xE0));
             if (isAudio) audioB64 = buf.toString('base64');
           }
