@@ -74,7 +74,7 @@ function LSSongDrawer({ song: songProp, ncmSong, ncmId, loved, onToggleLove, inL
   const localArc = (window.__lsStore.archive || []).filter(a => a.songId === song.id);
   const [srvArc, setSrvArc] = fUseState(null);
   fUseEffect(() => { let on = true; if (song && song.id && /^\d+$/.test(String(song.id))) { fetch((window.__LS_API || '/api') + '/song-notes?id=' + song.id).then(r => r.json()).then(d => { if (on && d && d.ok) setSrvArc(lsNotesToRecs(d.notes)); }).catch(() => {}); } return () => { on = false; }; }, [song && song.id]);
-  const archive = (srvArc && srvArc.length) ? srvArc : localArc;
+  const archive = (srvArc !== null) ? srvArc : localArc;
 
   const down = e => { startY.current = (e.touches ? e.touches[0].clientY : e.clientY); };
   const move = e => { if (startY.current == null) return; const y = (e.touches ? e.touches[0].clientY : e.clientY); const d = y - startY.current; if (d > 0) setDrag(d); };
@@ -178,7 +178,7 @@ function LSArchiveView({ onOpenSong }) {
   // 过滤旧版出厂占位（s1-s4）的记录，只显示真实的问Ta记录
   const localList = (window.__lsStore.archive || []).filter(function (a) { return !/^s\d$/.test(String((a && a.songId) || '')); });
   const [srvList, setSrvList] = fUseState(null);
-  fUseEffect(function () { fetch((window.__LS_API || '/api') + '/song-notes?limit=100').then(function (r) { return r.json(); }).then(function (d) { if (d && d.ok && d.notes && d.notes.length) setSrvList(lsNotesToRecs(d.notes)); }).catch(function () {}); }, []);
+  fUseEffect(function () { fetch((window.__LS_API || '/api') + '/song-notes?limit=100').then(function (r) { return r.json(); }).then(function (d) { if (d && d.ok) setSrvList(lsNotesToRecs(d.notes || [])); }).catch(function () {}); }, []);
   const list = srvList || localList;
   const f = list;
   // 真实听歌档案：服务端聚合（总量 / 时段偏好 / 常听排行 + 每首的听后印象）
