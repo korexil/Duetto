@@ -7,3 +7,4 @@ data/
 _*.mjs
 .image-slots.state.json
 nohup.out
+frontend/pkg/duetto-guide.pdf

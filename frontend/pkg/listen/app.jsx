@@ -250,7 +250,7 @@ function LSApp() {
       const isAI = actor && actor.who === 'ai' && (Date.now() - actor.t) < 4000;
       const who = isAI ? ((window.LS_PEOPLE && window.LS_PEOPLE.yu && window.LS_PEOPLE.yu.name) || 'AI') : ((window.LS_PEOPLE && window.LS_PEOPLE.eve && window.LS_PEOPLE.eve.name) || '我');
       const d0 = new Date(); const tm = (d0.getHours() < 10 ? '0' : '') + d0.getHours() + ':' + (d0.getMinutes() < 10 ? '0' : '') + d0.getMinutes();
-      const msg = { who: 'sys', t: who + ' ' + tail, time: tm, sys: true };
+      const msg = { who: 'sys', t: who + ' ' + tail, time: tm, sys: true, ts: Date.now() };
       if (window.__lsRoomChatIn) window.__lsRoomChatIn(msg);
       if (window.__LS_SYNC && window.__LS_SYNC.send) window.__LS_SYNC.send({ t: 'chat', msg });
     } catch (e) {}

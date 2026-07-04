@@ -341,7 +341,7 @@ app.post('/api/ncm/like', async (q,r)=>{ try{ await ncm.like({ id:q.query.id, li
 app.get('/api/ncm/likelist', async (_q,r)=>{ try{ const p=await ncmProfile(); if(!p) return r.json({ok:true,logged:false,ids:[]}); const ll=await ncm.likelist({ uid:p.userId, cookie:ncmCookie }); r.json({ ok:true, ids:(ll.body&&ll.body.ids)||[] }); }catch(e){ r.status(500).json({ok:false,error:String(e.message||e)}); } });
 // —— Room timeline persistence: append-only JSONL, zero deps ——
 function appendEvent(ev){ try { db.prepare('INSERT INTO room_events(room,msg,ts) VALUES(?,?,?)').run(String(ev.room||'main'), JSON.stringify(ev.msg||{}), ev.ts||Date.now()); } catch(e){} }
-function readEvents(room, limit){ try { const rows = db.prepare('SELECT msg FROM room_events WHERE room=? ORDER BY ts DESC, rowid DESC LIMIT ?').all(String(room), Number(limit)||120); return rows.map(r=>{ try{ return JSON.parse(r.msg); }catch(e){ return null; } }).filter(Boolean).reverse(); } catch(e) { return []; } }
+function readEvents(room, limit){ try { const rows = db.prepare('SELECT msg, ts FROM room_events WHERE room=? ORDER BY ts DESC, rowid DESC LIMIT ?').all(String(room), Number(limit)||120); return rows.map(r=>{ try{ const o=JSON.parse(r.msg); if(o && o.ts==null) o.ts=r.ts; return o; }catch(e){ return null; } }).filter(Boolean).reverse(); } catch(e) { return []; } }
 app.get('/api/room/events', (q,r)=>{ const room=String(q.query.room||'main'); const limit=Math.min(300, Number(q.query.limit)||120); r.json({ ok:true, events: readEvents(room, limit) }); });
 function normCover(u){ return String(u||'').replace(/^http:/,'https:'); }
 

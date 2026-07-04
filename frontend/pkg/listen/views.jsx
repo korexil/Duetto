@@ -986,7 +986,7 @@ function LSChatView({ tab, setTab, idx, setIdx, playing, setPlaying, ncmSong, nc
     if (!text || busy) return;
     const qv = lyrQuote; const qsongName = lyrQuoteSong || (song && song.title) || ''; setLyrQuote(''); setLyrQuoteSong('');
     setDraft('');
-    const userMsg = { who: 'eve', t: text, quote: qv || undefined, qsong: qv ? qsongName : undefined, time: lsNow() };
+    const userMsg = { who: 'eve', t: text, quote: qv || undefined, qsong: qv ? qsongName : undefined, time: lsNow(), ts: Date.now() };
     setChat(c => [...c, userMsg]);
     bcast(userMsg);
     // 仅「点歌聊」走 AI DJ；其余标签保持原样
@@ -1009,7 +1009,7 @@ function LSChatView({ tab, setTab, idx, setIdx, playing, setPlaying, ncmSong, nc
     const isStream = (function () { try { return localStorage.getItem('ls-room-replymode') === 'stream'; } catch (e) { return false; } })();
     // 分气泡模式按换行拆条；完整模式整段一条、带思考链
     const parts = isStream ? (shown ? [shown] : []) : shown.split(/\n+/).map(x => x.trim()).filter(Boolean);
-    const aiMsgs = (parts.length ? parts : ['（放好了，一起听）']).map(t2 => ({ who: 'yu', t: t2, time: lsNow() }));
+    const aiMsgs = (parts.length ? parts : ['（放好了，一起听）']).map(t2 => ({ who: 'yu', t: t2, time: lsNow(), ts: Date.now() }));
     if (isStream && think && aiMsgs.length) aiMsgs[0].think = think;
     setChat(c => {
       const arr = c.slice();
@@ -1030,7 +1030,7 @@ function LSChatView({ tab, setTab, idx, setIdx, playing, setPlaying, ncmSong, nc
   const pushShare = (whoKey, ov) => {
     const s = ov || song;
     if (!s || !s.id) return;
-    const shareMsg = { who: whoKey === 'ai' ? 'yu' : 'eve', share: { id: s.id, title: s.title, artist: s.artist || '', cover: s.cover || '', url: s.url || '' }, time: lsNow() };
+    const shareMsg = { who: whoKey === 'ai' ? 'yu' : 'eve', share: { id: s.id, title: s.title, artist: s.artist || '', cover: s.cover || '', url: s.url || '' }, time: lsNow(), ts: Date.now() };
     setChat(c => [...c, shareMsg]);
     bcast(shareMsg);
   };
@@ -1047,7 +1047,7 @@ function LSChatView({ tab, setTab, idx, setIdx, playing, setPlaying, ncmSong, nc
     var room = (window.__LS_SYNC && window.__LS_SYNC.room && window.__LS_SYNC.room()) || 'main';
     fetch((window.__LS_API || '/api') + '/room/events?room=' + encodeURIComponent(room) + '&limit=150')
       .then(function (r) { return r.json(); })
-      .then(function (d) { if (d && d.ok && Array.isArray(d.events)) setChat(function (prev) { var k = function (e) { return (e.who || '') + '|' + (e.t || '') + '|' + (e.time || ''); }; var seen = {}; var out = d.events.slice(); d.events.forEach(function (e) { seen[k(e)] = 1; }); (prev || []).forEach(function (e) { if (!seen[k(e)]) out.push(e); }); return out; }); })
+      .then(function (d) { if (d && d.ok && Array.isArray(d.events)) setChat(function (prev) { var k = function (e) { return (e.who || '') + '|' + (e.t || '') + '|' + (e.time || ''); }; var seen = {}; var out = d.events.slice(); d.events.forEach(function (e) { seen[k(e)] = 1; }); (prev || []).forEach(function (e) { if (!seen[k(e)]) out.push(e); }); out.sort(function (a, b) { return ((a && a.ts) || 0) - ((b && b.ts) || 0); }); return out; }); })
       .catch(function () {});
   }, []);
   const playSharedNcm = (sh) => { if (window.__lsPlayNcm) window.__lsPlayNcm({ id: sh.id, title: sh.title, artist: sh.artist, cover: sh.cover, url: sh.url || undefined }, null, 0); };
