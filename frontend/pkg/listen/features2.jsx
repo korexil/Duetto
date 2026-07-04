@@ -20,11 +20,11 @@ function LSFMView({ onOpenSong, bump }) {
     if (window.__ncmStatus) window.__ncmStatus().then(d => { if (d && d.logged) setLogged(true); }).catch(() => {});
   }, []);
 
-  // 登录后拉真实私人 FM
+  // 登录后拉真实私人 FM：网易云一次通常只给一小批，播放器会在 FM 队列里继续补后面的未知歌曲。
   const loadFm = () => {
-    fetch(LSAPI + '/ncm/personal-fm').then(r => r.json())
-      .then(d => setFm((d && d.songs) || []))
-      .catch(() => setFm([]));
+    return fetch(LSAPI + '/ncm/personal-fm').then(r => r.json())
+      .then(d => { const songs = (d && d.songs) || []; setFm(songs); return songs; })
+      .catch(() => { setFm([]); return []; });
   };
   f2UseEffect(() => { if (logged) { setFm(null); loadFm(); } }, [logged]);
 
@@ -38,10 +38,14 @@ function LSFMView({ onOpenSong, bump }) {
     setSynced('已少推这类 · 已同步'); setTimeout(() => setSynced(''), 1800);
   };
   const dislikeLocal = (id) => { const s = window.__lsStore; const it = s.fm.find(x => x.id === id); if (it) it.disliked = true; lsSaveStore(s); setSynced('已少推这类 · 已同步'); setTimeout(() => setSynced(''), 1800); bump(); };
-  const refillReal = () => { setSynced('换一批…'); setTimeout(() => setSynced(''), 1200); setFm(null); loadFm(); };
+  const refillReal = () => { setSynced('换一批…'); setFm(null); loadFm().then(songs => { setSynced(songs.length ? '换了一批' : '暂时没有新歌'); setTimeout(() => setSynced(''), 1400); }); };
   const refillLocal = () => { const s = window.__lsStore; s.fm.forEach(x => x.disliked = false); lsSaveStore(s); setSynced('换了一批'); setTimeout(() => setSynced(''), 1500); bump(); };
 
-  const play = (song, list, i) => { if (window.__lsPlayNcm) window.__lsPlayNcm(song, list, i); else if (onOpenSong) onOpenSong(song); };
+  const playFm = (songs, i) => {
+    if (window.__lsStartFm) { window.__lsStartFm(songs, i || 0); setSynced('已替换当前播放列表'); setTimeout(() => setSynced(''), 1400); }
+    else if (window.__lsPlayNcm && songs && songs.length) window.__lsPlayNcm(songs[i || 0], songs, i || 0);
+  };
+  const play = (song, list, i) => { if (logged) playFm(list, i); else if (window.__lsPlayNcm) window.__lsPlayNcm(song, list, i); else if (onOpenSong) onOpenSong(song); };
 
   const list = logged ? fm : localFm;
   const openItem = (it, i) => { if (logged) play(it, list, i); else if (onOpenSong) onOpenSong(it); };
@@ -62,6 +66,7 @@ function LSFMView({ onOpenSong, bump }) {
           </div>
         )) : <LSEmpty t="这一批听完了" s="点下面换一批" />}
       </div>
+      {logged && list && list.length ? <button className="ls-fm-refill" onClick={() => playFm(list, 0)}>播放私人 FM ▶</button> : null}
       {logged && <button className="ls-fm-refill" onClick={refill}>换一批 ↻</button>}
     </div>
   );

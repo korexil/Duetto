@@ -1,7 +1,7 @@
 {
-  "name": "luciola-listen",
+  "name": "duetto",
   "version": "1.0.0",
-  "description": "Self-hostable listen-together app with a bring-your-own-AI companion.",
+  "description": "Duetto - a self-hostable listen-together player for two, with a bring-your-own-AI companion that actually listens.",
   "type": "module",
   "scripts": {
     "start": "node server/index.mjs"

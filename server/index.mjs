@@ -7,7 +7,7 @@ import { fileURLToPath } from 'url';
 import ncm from 'NeteaseCloudMusicApi';
 import { DatabaseSync } from 'node:sqlite';
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const dataDir = process.env.LUCIOLA_DATA_DIR || path.join(rootDir, 'data');
+const dataDir = process.env.DUETTO_DATA_DIR || path.join(rootDir, 'data');
 const settingsFile = path.join(dataDir, 'settings.json');
 const PORT = Number(process.env.PORT || 4183);
 const DEFAULTS = { user_name:'You', ai_name:'DJ', room_name:'Our Room', room_sub:'', ai:{base_url:'',api_key:'',model:'',persona:''}, show_gallery:true, avatar_url:'', ai_avatar_url:'', background_url:'', theme:'' };
@@ -150,7 +150,7 @@ async function enrichNp(s, np){
   return np;
 }
 // —— 听后印象：对话时若正在放的歌还没有分析，就后台生成一份（服务端自己拉歌词）；
-// 已有分析则注入对话上下文 —— 让 AI 是"真听过这首歌"的状态（对齐 luciola 的设计）
+// 已有分析则注入对话上下文 —— 让 AI 是"真听过这首歌"的状态
 const _anBusy = {};
 function ensureAnalysis(s, np){
   try {
@@ -274,7 +274,7 @@ function readEvents(room, limit){ try { const rows = db.prepare('SELECT msg FROM
 app.get('/api/room/events', (q,r)=>{ const room=String(q.query.room||'main'); const limit=Math.min(300, Number(q.query.limit)||120); r.json({ ok:true, events: readEvents(room, limit) }); });
 function normCover(u){ return String(u||'').replace(/^http:/,'https:'); }
 
-// —— Listening log: structured play history (luciola-style time buckets) ——
+// —— Listening log: structured play history with time-of-day buckets ——
 app.post('/api/listen-log',(q,r)=>{ try{ const b=q.body||{}; if(!b.title&&!b.id) return r.json({ok:false}); const now=Date.now(); const cv=normCover(b.cover||''); let h=12; try{ h=Number(new Date().toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false,hour:'2-digit'})); }catch(e){} db.prepare('INSERT INTO plays(id,title,artist,dur,cover,bucket,ts) VALUES(?,?,?,?,?,?,?)').run(String(b.id||''), String(b.title||''), String(b.artist||''), Number(b.dur)||0, cv, timeBucket(h), now);
   if (b.id) db.prepare("INSERT INTO songs(id,title,artist,cover,listen_count,first_listened_at,last_listened_at,created_at,updated_at) VALUES(?,?,?,?,1,?,?,?,?) ON CONFLICT(id) DO UPDATE SET listen_count=listen_count+1, last_listened_at=excluded.last_listened_at, updated_at=excluded.updated_at, title=excluded.title, artist=excluded.artist, cover=CASE WHEN excluded.cover!='' THEN excluded.cover ELSE cover END").run(String(b.id), String(b.title||''), String(b.artist||''), cv, now, now, now, now); r.json({ok:true}); }catch(e){ r.status(500).json({ok:false,error:e.message}); } });
 app.get('/api/listen-log',(q,r)=>{ try{ const limit=Math.min(500, Number(q.query.limit)||100); const out=db.prepare('SELECT id,title,artist,dur,cover,bucket,ts FROM plays ORDER BY ts DESC, rowid DESC LIMIT ?').all(limit); r.json({ok:true,plays:out}); }catch(e){ r.status(500).json({ok:false,error:e.message}); } });
@@ -350,4 +350,4 @@ wss.on('connection', (sock, req) => {
   });
   sock.on('close', () => { const set = rooms.get(room); if (set) { set.delete(sock); if (!set.size) rooms.delete(room); } });
 });
-server.listen(PORT, () => console.log('Listen Together server on ' + PORT));
+server.listen(PORT, () => console.log('Duetto server on ' + PORT));
