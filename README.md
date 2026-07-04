@@ -8,7 +8,7 @@ all powered by *your own* audio and AI key, configured from the UI.
 
 - **Real audio playback** — play/pause, seek, prev/next, live progress, play modes (loop/one/shuffle), background-safe track prefetch so lock-screen playback keeps going
 - **Listen together** — share a room; play / pause / seek / track changes sync in real time (WebSocket); share songs into the room chat as cards
-- **AI companion** — chats along, can DJ (play/switch/share songs via inline actions), wired to *your* OpenAI-compatible endpoint; pull the model list from your endpoint in Settings
+- **AI companion** — chats along in multi-bubble replies with real conversation context, can DJ (play/switch/share songs via inline actions); it *listens* too: per-song impressions generated from full lyrics, rolling memories built from your "ask about this lyric" moments, and it knows the playback position and how many times you've played a song together — all wired to *your* OpenAI-compatible endpoint
 - **NetEase Cloud Music integration** — QR login, playlists, search, daily recommendations, personal FM, lyrics **with translation toggle**, artist pages, likes, batch playlist editing (multi-select play / queue / save / delete)
 - **Add your own songs** — paste a direct audio URL under Library → Local
 - **Themes & customization** — five built-in skins + full custom palette, dark mode, wallpaper, per-surface opacity & blur (nav bar, cards, room chrome, chat bubbles), draggable floating ball
@@ -40,6 +40,12 @@ your own server, which forwards them to your endpoint.
 You can also set a server-wide default in `data/settings.json` (`ai.base_url` / `ai.api_key` /
 `ai.model`). The stored key is never returned by the API — `GET /api/settings` masks it — and
 `data/` is gitignored, so nothing private ships with the repo.
+
+**Analysis model (optional).** The second block in Model settings picks the model used for song
+impressions and rolling memories. Fill in as much or as little as you like — just a model name,
+just a key, or a full endpoint+key+name — anything missing is borrowed from your chat config
+automatically. Leave it empty to use the chat model for everything. Server-side defaults work the
+same way via `ai.a_model` / `ai.a_base` / `ai.a_key` in `data/settings.json`.
 
 ## How it works
 
