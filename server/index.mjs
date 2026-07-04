@@ -52,6 +52,21 @@ app.get('/api/ncm/playlist-add', async (q,r)=>{ try{ await ncm.playlist_tracks({
 app.get('/api/ncm/playlist-del', async (q,r)=>{ try{ await ncm.playlist_tracks({ op:'del', pid:q.query.pid, tracks:q.query.id, cookie:ncmCookie }); r.json({ ok:true }); }catch(e){ r.status(500).json({ok:false,error:String(e.message||e)}); } });
 app.get('/api/ncm/like', async (q,r)=>{ try{ await ncm.like({ id:q.query.id, like:(q.query.like==='1'||q.query.like==='true'), cookie:ncmCookie }); r.json({ ok:true }); }catch(e){ r.status(500).json({ok:false,error:String(e.message||e)}); } });
 app.get('/api/ncm/likelist', async (_q,r)=>{ try{ const p=await ncmProfile(); if(!p) return r.json({ok:true,logged:false,ids:[]}); const ll=await ncm.likelist({ uid:p.userId, cookie:ncmCookie }); r.json({ ok:true, ids:(ll.body&&ll.body.ids)||[] }); }catch(e){ r.status(500).json({ok:false,error:String(e.message||e)}); } });
+// —— Room timeline persistence: append-only JSONL, zero deps ——
+const eventsFile = path.join(dataDir, 'room-events.jsonl');
+function appendEvent(ev){ try { fs.mkdirSync(dataDir,{recursive:true}); fs.appendFileSync(eventsFile, JSON.stringify(ev) + '\n'); } catch(e){} }
+function readEvents(room, limit){
+  try {
+    const lines = fs.readFileSync(eventsFile,'utf8').trim().split('\n');
+    const out = [];
+    for (let i = lines.length - 1; i >= 0 && out.length < limit; i--) {
+      try { const e = JSON.parse(lines[i]); if (e.room === room && e.msg) out.push(e.msg); } catch(err){}
+    }
+    return out.reverse();
+  } catch(e) { return []; }
+}
+app.get('/api/room/events', (q,r)=>{ const room=String(q.query.room||'main'); const limit=Math.min(300, Number(q.query.limit)||120); r.json({ ok:true, events: readEvents(room, limit) }); });
+
 app.use(express.static(path.join(rootDir,'frontend')));
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server, path: '/ws' });
@@ -77,6 +92,8 @@ wss.on('connection', (sock, req) => {
       } catch(e) { sock.send(JSON.stringify({ t:'ai', id:m.id, reply:'[AI error: '+e.message+']' })); }
       return;
     }
+    // chat/share/system messages: persist to the room timeline, then relay
+    if (m && m.t === 'chat' && m.msg) appendEvent({ room, msg: m.msg, ts: Date.now() });
     const set = rooms.get(room); if (set) for (const c of set) if (c !== sock && c.readyState === 1) c.send(d.toString());
   });
   sock.on('close', () => { const set = rooms.get(room); if (set) { set.delete(sock); if (!set.size) rooms.delete(room); } });

@@ -877,7 +877,7 @@ function LSChatView({ tab, setTab, idx, setIdx, playing, setPlaying, ncmSong, nc
       if (pm !== s.mode) msgs.push(who + ' 切换到' + (pm === 'one' ? '单曲循环' : pm === 'shuffle' ? '随机播放' : '列表循环'));
     }
     s.title = title; s.playing = isPlaying; s.mode = pm;
-    if (msgs.length) setChat(c => [...c, ...msgs.map(t => ({ who: 'sys', t: t, time: lsNow(), sys: true }))]);
+    if (msgs.length) { const sysMsgs = msgs.map(t => ({ who: 'sys', t: t, time: lsNow(), sys: true })); setChat(c => [...c, ...sysMsgs]); sysMsgs.forEach(bcast); }
   }, [song && song.title, isPlaying, playMode]);
 
   // 新消息滚到底
@@ -908,7 +908,9 @@ function LSChatView({ tab, setTab, idx, setIdx, playing, setPlaying, ncmSong, nc
     const text = draft.trim();
     if (!text || busy) return;
     setDraft('');
-    setChat(c => [...c, { who: 'eve', t: text, time: lsNow() }]);
+    const userMsg = { who: 'eve', t: text, time: lsNow() };
+    setChat(c => [...c, userMsg]);
+    bcast(userMsg);
     // 仅「点歌聊」走 AI DJ；其余标签保持原样
     if (tab !== 'chat' || !(window.claude && window.claude.complete)) return;
     setBusy(true);
@@ -921,11 +923,13 @@ function LSChatView({ tab, setTab, idx, setIdx, playing, setPlaying, ncmSong, nc
     const m = reply.match(ACT);
     if (m) { try { const act = JSON.parse(m[1]); if (window.__lsRunAction) window.__lsRunAction(act); } catch (e) {} }
     const shown = reply.replace(/<<ACT>>(\{[\s\S]*?\})<<>>/g, '').trim();
+    const aiMsg = { who: 'yu', t: shown || '（放好了，一起听）', time: lsNow() };
     setChat(c => {
       const arr = c.slice();
-      for (let i = arr.length - 1; i >= 0; i--) { if (arr[i].pending) { arr[i] = { who: 'yu', t: shown || '（放好了，一起听）', time: lsNow() }; break; } }
+      for (let i = arr.length - 1; i >= 0; i--) { if (arr[i].pending) { arr[i] = aiMsg; break; } }
       return arr;
     });
+    bcast(aiMsg);
     setBusy(false);
   };
 
@@ -939,13 +943,26 @@ function LSChatView({ tab, setTab, idx, setIdx, playing, setPlaying, ncmSong, nc
   const pushShare = (whoKey, ov) => {
     const s = ov || song;
     if (!s || !s.id) return;
-    setChat(c => [...c, { who: whoKey === 'ai' ? 'yu' : 'eve', share: { id: s.id, title: s.title, artist: s.artist || '', cover: s.cover || '', url: s.url || '' }, time: lsNow() }]);
+    const shareMsg = { who: whoKey === 'ai' ? 'yu' : 'eve', share: { id: s.id, title: s.title, artist: s.artist || '', cover: s.cover || '', url: s.url || '' }, time: lsNow() };
+    setChat(c => [...c, shareMsg]);
+    bcast(shareMsg);
   };
+  // 房间消息广播 + 服务端时间线：说的话/分享/AI 回复经 WS 落库并同步给同房间的人
+  const bcast = (msg) => { try { if (window.__LS_SYNC && window.__LS_SYNC.send) window.__LS_SYNC.send({ t: 'chat', msg: msg }); } catch (e) {} };
   vUseEffect(function () {
     window.__lsRoomShare = function (whoKey, ov) { pushShare(whoKey, ov); };
     window.__lsOpenRoomSet = function () { setRoomSetOpen(true); };
-    return function () { if (window.__lsRoomShare) delete window.__lsRoomShare; if (window.__lsOpenRoomSet) delete window.__lsOpenRoomSet; };
+    window.__lsRoomChatIn = function (msg) { if (msg && (msg.t || msg.share)) setChat(function (c) { return [...c, msg]; }); };
+    return function () { if (window.__lsRoomShare) delete window.__lsRoomShare; if (window.__lsOpenRoomSet) delete window.__lsOpenRoomSet; if (window.__lsRoomChatIn) delete window.__lsRoomChatIn; };
   });
+  // 进房间先拉服务端历史（换设备/清缓存不丢）；拉不到就用本地缓存兜底
+  vUseEffect(function () {
+    var room = (window.__LS_SYNC && window.__LS_SYNC.room && window.__LS_SYNC.room()) || 'main';
+    fetch((window.__LS_API || '/api') + '/room/events?room=' + encodeURIComponent(room) + '&limit=150')
+      .then(function (r) { return r.json(); })
+      .then(function (d) { if (d && d.ok && d.events && d.events.length) setChat(d.events); })
+      .catch(function () {});
+  }, []);
   const playSharedNcm = (sh) => { if (window.__lsPlayNcm) window.__lsPlayNcm({ id: sh.id, title: sh.title, artist: sh.artist, cover: sh.cover, url: sh.url || undefined }, null, 0); };
   // 选歌分享：点分享键弹面板，可直接分享当前歌，也可搜索点选任意一首
   const [sharePickOpen, setSharePickOpen] = vUseState(false);
