@@ -57,7 +57,7 @@ function LSArcCard({ rec, compact, onOpen }) {
 
 function lsNotesToRecs(rows) {
   return (rows || []).map(function (n, i) {
-    return { id: 'sn' + (n.ts || 0) + '_' + i, songId: String(n.song_id || ''), title: n.title || '', artist: n.artist || '', passage: n.passage || '', think: n.thought || '', reply: n.reply || '', ts: n.ts };
+    return { id: 'sn' + (n.ts || 0) + '_' + i, songId: String(n.song_id || ''), title: n.title || '', artist: n.artist || '', cover: n.cover || '', passage: n.passage || '', think: n.thought || '', reply: n.reply || '', ts: n.ts };
   });
 }
 
