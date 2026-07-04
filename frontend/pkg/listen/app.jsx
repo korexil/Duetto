@@ -182,6 +182,14 @@ function LSApp() {
     if (!add.length) return;
     setNcmQueue(q => q ? { ...q, list: [...q.list, ...add] } : { list: add, idx: 0 });
   };
+  // 队列弹窗用：替换真实队列，但不主动改播放进度/播放状态。
+  window.__lsReplaceQueue = (songs, idx0) => {
+    var lst = Array.isArray(songs) ? songs.filter(Boolean) : (songs ? [songs] : []);
+    if (!lst.length) { setNcmQueue(null); return; }
+    var i = Math.max(0, Math.min(lst.length - 1, idx0 || 0));
+    setNcmQueue({ list: lst, idx: i });
+    setNcmSong(lst[i]);
+  };
 
   // 播放模拟
   aUseEffect(() => { if (ncmSong) return; var s = LS_SONGS[idx]; var src = (s && s.src) || LS_DEMO_SRC[idx % LS_DEMO_SRC.length]; if (lsAudioEl.src !== src) lsAudioEl.src = src; }, [idx, ncmSong]);
@@ -272,6 +280,7 @@ function LSApp() {
     window.__lsApplyRemote = function(m){
       // 远端同步来的状态：记录来源，让广播 effect 据此跳过回声（不再依赖 250ms 计时窗口）
       window.__lsLastRemote = { action: m.action, idx: (m.idx != null ? m.idx : null) };
+      window.__lsRemoteEvt = Date.now(); // 状态卡片门控：远程同步来的变化不是本人的操作，不发卡
       if (m.idx != null) setIdx(m.idx);
       if (m.action === 'play') setPlaying(true);
       else if (m.action === 'pause') setPlaying(false);

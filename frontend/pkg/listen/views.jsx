@@ -462,27 +462,90 @@ function LSQueueSheet({ idx, setIdx, ncmQueue, playNcmIdx, playMode, cyclePlayMo
   const real = !!(ncmQueue && ncmQueue.list && ncmQueue.list.length);
   const [tab, setTab] = vUseState('cur');
   const [list, setList] = vUseState(() => LS_SONGS.map((s, i) => i));
+  const [toast, setToast] = vUseState('');
   const playModeIcon = playMode === 'one' ? LSIcon.one : playMode === 'shuffle' ? LSIcon.shuffle : LSIcon.loop;
   const playModeName = playMode === 'one' ? '单曲循环' : playMode === 'shuffle' ? '随机播放' : '列表循环';
-  const removeAt = (e, songI) => { e.stopPropagation(); setList(l => l.filter(x => x !== songI)); };
+  const stop = (e) => { if (e) { e.preventDefault(); e.stopPropagation(); } };
+  const say = (msg) => {
+    setToast(msg);
+    clearTimeout(window.__lsQueueToastTimer);
+    window.__lsQueueToastTimer = setTimeout(function () { setToast(''); }, 1600);
+  };
+  const currentSong = () => real ? ((ncmQueue.list && ncmQueue.list[ncmQueue.idx]) || ncmQueue.list[0]) : (LS_SONGS[idx] || LS_SONGS[0]);
+  const removeAt = (e, songI) => { stop(e); setList(l => l.filter(x => x !== songI)); };
+  const removeRealAt = (e, i) => {
+    stop(e);
+    if (!real || !window.__lsReplaceQueue) return;
+    if (i === ncmQueue.idx) { say('正在播放的歌会保留'); return; }
+    var nextList = ncmQueue.list.filter(function (_s, j) { return j !== i; });
+    var nextIdx = i < ncmQueue.idx ? ncmQueue.idx - 1 : ncmQueue.idx;
+    if (!nextList.length) { say('队列至少保留当前播放'); return; }
+    window.__lsReplaceQueue(nextList, nextIdx);
+    say('已从队列移除');
+  };
+  const clearQueue = (e) => {
+    stop(e);
+    if (real) {
+      var curSong = currentSong();
+      if (curSong && window.__lsReplaceQueue) {
+        window.__lsReplaceQueue([curSong], 0);
+        say('已清空待播，保留当前播放');
+      }
+      return;
+    }
+    setList([]);
+    say('已清空队列');
+  };
+  const downloadCurrent = (e) => {
+    stop(e);
+    var song = currentSong();
+    var el = window.__lsAudioEl || document.querySelector('audio');
+    var url = (song && song.url) || (el && el.src) || '';
+    if (!url) { say('当前歌曲暂无可下载地址'); return; }
+    try {
+      var a = document.createElement('a');
+      a.href = url;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.download = ((song && song.title) || 'song').replace(/[\\/:*?"<>|]+/g, '_') + '.mp3';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function () { try { document.body.removeChild(a); } catch (_e) {} }, 0);
+      say('已打开下载');
+    } catch (er) {
+      try { window.open(url, '_blank'); } catch (_e) {}
+      say('已打开下载');
+    }
+  };
+  const saveCurrent = (e) => {
+    stop(e);
+    var song = currentSong();
+    if (song && song.id && /^\d+$/.test(String(song.id)) && window.__lsSavePicker) {
+      window.__lsSavePicker(song);
+      onClose();
+      return;
+    }
+    say('这首暂不能收藏');
+  };
   return (
     <div className="ls-sheet-mask" onClick={onClose}>
       <div className="ls-queue" onClick={e => e.stopPropagation()}>
         <div className="ls-queue-grip"></div>
         {/* 顶部：当前播放 / 历史播放 */}
         <div className="ls-queue-tabs">
-          <button className={tab === 'cur' ? 'on' : ''} onClick={() => setTab('cur')}>当前播放<sup>{real ? ncmQueue.list.length : list.length}</sup></button>
-          <button className={tab === 'his' ? 'on' : ''} onClick={() => setTab('his')}>历史播放</button>
+          <button className={tab === 'cur' ? 'on' : ''} onClick={(e) => { stop(e); setTab('cur'); }}>当前播放<sup>{real ? ncmQueue.list.length : list.length}</sup></button>
+          <button className={tab === 'his' ? 'on' : ''} onClick={(e) => { stop(e); setTab('his'); }}>历史播放</button>
         </div>
         {/* 操作栏：播放方式 chip + 智能过渡 + 下载/收藏/清空 */}
         <div className="ls-queue-bar">
-          <button className="chip" onClick={cyclePlayMode}>{playModeIcon()}<span>{playModeName}</span></button>
-          <button className="chip"><span className="merge"></span>智能过渡</button>
+          <button className="chip" onClick={(e) => { stop(e); cyclePlayMode && cyclePlayMode(); }}>{playModeIcon()}<span>{playModeName}</span></button>
+          <button className="chip" onClick={(e) => { stop(e); say('智能过渡已保持当前设置'); }}><span className="merge"></span>智能过渡</button>
           <div className="sp"></div>
-          <button className="ic" title="下载"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12 4v11M8 11l4 4 4-4M5 20h14"/></svg></button>
-          <button className="ic" title="收藏"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 9v6M9 12h6"/></svg></button>
-          <button className="ic" title="清空" onClick={() => { if (!real) setList([]); }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M5 7h14M9 7V5h6v2M7 7l1 13h8l1-13"/></svg></button>
+          <button className="ic" title="下载" onClick={downloadCurrent}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12 4v11M8 11l4 4 4-4M5 20h14"/></svg></button>
+          <button className="ic" title="收藏" onClick={saveCurrent}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 9v6M9 12h6"/></svg></button>
+          <button className="ic" title="清空" onClick={clearQueue}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M5 7h14M9 7V5h6v2M7 7l1 13h8l1-13"/></svg></button>
         </div>
+        {toast && <div className="ls-toast" style={{ position: 'absolute', left: '50%', bottom: 22, transform: 'translateX(-50%)', zIndex: 30, padding: '8px 16px', borderRadius: 20, background: 'rgba(40,36,42,.92)', color: '#fff', fontFamily: 'var(--ls-cn)', fontSize: 12, whiteSpace: 'nowrap' }}>{toast}</div>}
         <div className="ls-queue-auto"><span className="dot">✓</span>自动播放推荐歌曲</div>
         <div className="ls-queue-list">
           {real ? ncmQueue.list.map((s, i) => (
@@ -492,7 +555,7 @@ function LSQueueSheet({ idx, setIdx, ncmQueue, playNcmIdx, playMode, cyclePlayMo
                 <b>{s.fee === 1 && <span className="vip">VIP</span>}{s.title}{i === ncmQueue.idx && <span className="bars"><i></i><i></i><i></i></span>}</b>
                 <i>· {s.artist}{s.album ? ' · ' + s.album : ''} <span className="spark">✦</span></i>
               </div>
-              <button className="x" onClick={(e) => e.stopPropagation()}>×</button>
+              <button className="x" onClick={(e) => removeRealAt(e, i)}>×</button>
             </div>
           )) : (list.length ? list : []).map((songI) => { const s = LS_SONGS[songI]; return (
             <div key={s.id} className={'ls-queue-item' + (songI === idx ? ' on' : '')} onClick={() => { setIdx(songI); onClose(); }}>
@@ -901,10 +964,10 @@ function LSChatView({ tab, setTab, idx, setIdx, playing, setPlaying, ncmSong, nc
       ? ((window.LS_PEOPLE && window.LS_PEOPLE.yu && window.LS_PEOPLE.yu.name) || 'AI')
       : ((window.LS_PEOPLE && window.LS_PEOPLE.eve && window.LS_PEOPLE.eve.name) || '我');
     const msgs = [];
-    if (title && title !== s.title) msgs.push(who + ' 播放了《' + title + '》' + (npArtist ? ' ' + npArtist : ''));
+    const quietE = (window.__lsSysEvt && (Date.now() - window.__lsSysEvt) < 3000) || (window.__lsRemoteEvt && (Date.now() - window.__lsRemoteEvt) < 3000);
+    if (title && title !== s.title) { if (!quietE) msgs.push(who + ' 播放了《' + title + '》' + (npArtist ? ' ' + npArtist : '')); }
     else {
-      const sysE = window.__lsSysEvt && (Date.now() - window.__lsSysEvt) < 3000;
-      if (isPlaying !== s.playing && !sysE) msgs.push(who + (isPlaying ? ' 继续播放' : ' 暂停了') + (title ? ' 《' + title + '》' : ''));
+      if (isPlaying !== s.playing && !quietE) msgs.push(who + (isPlaying ? ' 继续播放' : ' 暂停了') + (title ? ' 《' + title + '》' : ''));
       if (pm !== s.mode) msgs.push(who + ' 切换到' + (pm === 'one' ? '单曲循环' : pm === 'shuffle' ? '随机播放' : '列表循环'));
     }
     s.title = title; s.playing = isPlaying; s.mode = pm;
