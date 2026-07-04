@@ -29,7 +29,7 @@ input, textarea { font: inherit; color: inherit; }
   --ls-amb: radial-gradient(900px 600px at 20% 6%, #f6f3ee 0%, transparent 60%),
             radial-gradient(800px 700px at 84% 96%, #e9e4db 0%, transparent 62%), #ece8e1;
 }
-/* 木漏れ日 — 森系绿 · 窗边阳光 */
+/* 豆青 — 森系绿 · 窗边阳光 */
 .ls-skin-douqing {
   --ls-bg: #eaede2; --ls-bg2: #e0e4d6;
   --ls-panel: #f4f6ee; --ls-panel2: #eaeee1;
