@@ -31,6 +31,24 @@ function LSBrowseView({ onPlay, onOpenSong, onOpenFM }) {
     if (rc != null) { setNcmDaily(rc); return; }
     if (window.__ncmRecommend) window.__ncmRecommend().then(songs => { if (songs) setNcmDaily(songs); }).catch(() => {});
   }, [ncmLogged]);
+  // 2026-07-09 老虚点单："最近常听"读真实播放日志（listen-log 表），按 id 聚合出播放次数
+  const [recentPlays, setRecentPlays] = v3UseState(null);
+  v3UseEffect(() => {
+    if (tab !== 'recent') return;
+    fetch(LSAPI + '/listen-log?limit=200').then(r => r.json()).then(d => {
+      const arr = (d && d.plays) || [];
+      const agg = {};
+      arr.forEach(p => {
+        const k = String(p.id || (p.title + '|' + p.artist));
+        if (!agg[k]) agg[k] = { id: p.id, title: p.title, artist: p.artist, cover: p.cover, times: 0, last: 0 };
+        agg[k].times++;
+        if (p.ts > agg[k].last) agg[k].last = p.ts;
+      });
+      const list = Object.values(agg).sort((a, b) => b.last - a.last);
+      setRecentPlays(list);
+    }).catch(() => setRecentPlays([]));
+  }, [tab]);
+  const fmtWhen = (ts) => { const diff = Date.now() - ts; const m = Math.floor(diff / 60000); if (m < 1) return '刚刚'; if (m < 60) return m + ' 分钟前'; const h = Math.floor(m / 60); if (h < 24) return h + ' 小时前'; const d = Math.floor(h / 24); if (d < 30) return d + ' 天前'; return new Date(ts).toLocaleDateString('zh-CN'); };
   const playNcm = (song, list, i) => { if (window.__lsPlayNcm) window.__lsPlayNcm(song, list, i); else onPlay(song); };
   const doNcmSearch = () => { const kw = q.trim(); if (!kw) return; /* 2026-07-09：拆掉 !ncmLogged 短路——匿名搜索+unblock 播放都能跑，登录只影响日推/歌单 */ fetch(LSAPI + '/ncm/search?kw=' + encodeURIComponent(kw)).then(r => r.json()).then(d => { if (d && d.songs) setNcmResults(d.songs); }).catch(() => {}); setOpenArtist(null); setArtistSongs([]); fetch(LSAPI + '/ncm/search-artist?kw=' + encodeURIComponent(kw)).then(r => r.json()).then(d => { if (d && d.artists) setNcmArtists(d.artists); }).catch(() => {}); };
   const openNcmArtist = (a) => { if (openArtist && openArtist.id === a.id) { setOpenArtist(null); setArtistSongs([]); return; } setOpenArtist({ id: a.id, name: a.name }); setArtistSongs([]); fetch(LSAPI + '/ncm/artist-songs?id=' + a.id).then(r => r.json()).then(d => { if (d && d.songs) setArtistSongs(d.songs); }).catch(() => {}); };
@@ -130,13 +148,15 @@ function LSBrowseView({ onPlay, onOpenSong, onOpenFM }) {
 
           {tab === 'recent' && (
             <div className="ls-recent">
-              {LS_RECENT.length ? LS_RECENT.map((r, i) => { const s = lsById(r.songId); if (!s) return null; return (
-                <div className="ls-songrow" key={i} onClick={() => onPlay(s)}>
-                  <div className="cv"><LSCover cover={s.cover} size={100} /></div>
-                  <div className="si"><b>{s.title}</b><i>{s.artist} · 听过 {r.times} 次</i></div>
-                  <span className="when">{r.when}</span>
+              {recentPlays === null ? (
+                <div className="ls-empty"><div className="e-t">加载中…</div></div>
+              ) : recentPlays.length ? recentPlays.map((r, i) => (
+                <div className="ls-songrow" key={(r.id || i) + '_rp_' + i} onClick={() => { const s = { id: r.id, title: r.title, artist: r.artist, cover: r.cover }; if (r.id && /^\d+$/.test(String(r.id)) && window.__lsOpenNcmSong) window.__lsOpenNcmSong(s); else onPlay(s); }}>
+                  <div className="cv"><LSCover cover={r.cover} size={100} /></div>
+                  <div className="si"><b>{r.title}</b><i>{r.artist}{r.times > 1 ? ' · 听过 ' + r.times + ' 次' : ''}</i></div>
+                  <span className="when">{fmtWhen(r.last)}</span>
                 </div>
-              ); }) : <div className="ls-empty"><div className="e-t">还没有最近常听</div><div className="e-s">播放真实歌曲后这里会有记录</div></div>}
+              )) : <div className="ls-empty"><div className="e-t">还没有最近常听</div><div className="e-s">播放真实歌曲后这里会有记录</div></div>}
             </div>
           )}
         </>

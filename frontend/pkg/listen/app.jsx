@@ -333,10 +333,18 @@ function LSApp() {
   window.__lsOpenNcmSong = (song) => { if (song) setNcmDrawerSong(song); };
   // 把 songs 追加到当前队列末尾（不打断当前播放）
   window.__lsQueueAppend = (songs) => {
-    var add = (songs && songs.length) ? songs : (songs ? [songs] : []);
-    if (!add.length) return;
+    var raw = (songs && songs.length) ? songs : (songs ? [songs] : []);
+    if (!raw.length) return;
     window.__lsPrefetch = null; window.__lsShufflePlan = [];
-    setNcmQueue(q => { var list = q ? [...q.list, ...add] : add; if (window.__lsAdv) { window.__lsAdv.list = list; window.__lsAdv.kind = ''; } return q ? { ...q, list: list, kind: '' } : { list: add, idx: 0, kind: '' }; });
+    setNcmQueue(q => {
+      // 去重：跳过已经在队列里的（同 id 不追加，2026-07-09 老虚点单待播重复 bug）
+      var seen = {}; (q && q.list || []).forEach(function (x) { if (x && x.id != null) seen[String(x.id)] = 1; });
+      var add = raw.filter(function (x) { var k = x && x.id != null ? String(x.id) : ''; if (!k || seen[k]) return false; seen[k] = 1; return true; });
+      if (!add.length) return q;
+      var list = q ? [...q.list, ...add] : add;
+      if (window.__lsAdv) { window.__lsAdv.list = list; window.__lsAdv.kind = ''; }
+      return q ? { ...q, list: list, kind: '' } : { list: add, idx: 0, kind: '' };
+    });
   };
   // 队列弹窗用：替换真实队列，但不主动改播放进度/播放状态。
   window.__lsReplaceQueue = (songs, idx0) => {

@@ -658,11 +658,20 @@ function LSFullCenter({ song, cur, dur, isPlaying, loved, ncmQueue, ncmLyric, pl
   const [results, setResults] = vUseState([]);
   const [searching, setSearching] = vUseState(false);
   const [playlists, setPlaylists] = vUseState(null);
+  const [localPlaylists, setLocalPlaylists] = vUseState(null);  // 2026-07-09 老虚点单本地歌单
   const [openPl, setOpenPl] = vUseState(null);
   const [tracks, setTracks] = vUseState([]);
   const doSearch = function () { if (!q.trim()) return; setSearching(true); fetch(fcBase + '/ncm/search?kw=' + encodeURIComponent(q.trim())).then(function (r) { return r.json(); }).then(function (d) { setResults((d && d.songs) || []); setSearching(false); }).catch(function () { setSearching(false); }); };
-  vUseEffect(function () { if (tab === 'playlists' && playlists === null) { fetch(fcBase + '/ncm/playlists').then(function (r) { return r.json(); }).then(function (d) { setPlaylists((d && d.playlists) || []); }).catch(function () { setPlaylists([]); }); } }, [tab]);
-  const openPlaylist = function (pl) { setOpenPl(pl); setTracks([]); fetch(fcBase + '/ncm/playlist?id=' + pl.id).then(function (r) { return r.json(); }).then(function (d) { setTracks((d && d.songs) || []); }).catch(function () {}); };
+  vUseEffect(function () {
+    if (tab !== 'playlists') return;
+    if (playlists === null) fetch(fcBase + '/ncm/playlists').then(function (r) { return r.json(); }).then(function (d) { setPlaylists((d && d.playlists) || []); }).catch(function () { setPlaylists([]); });
+    if (localPlaylists === null) fetch(fcBase + '/local/playlists').then(function (r) { return r.json(); }).then(function (d) { setLocalPlaylists((d && d.playlists) || []); }).catch(function () { setLocalPlaylists([]); });
+  }, [tab]);
+  const openPlaylist = function (pl) {
+    setOpenPl(pl); setTracks([]);
+    const u = pl.local ? (fcBase + '/local/playlist?id=' + encodeURIComponent(pl.id)) : (fcBase + '/ncm/playlist?id=' + pl.id);
+    fetch(u).then(function (r) { return r.json(); }).then(function (d) { setTracks((d && d.songs) || []); }).catch(function () {});
+  };
   const lyrics = ncmLyric ? lsParseLRC(ncmLyric) : ((song && song.lyrics) || []);
   let li = 0; lyrics.forEach(function (l, i) { if (cur >= l.t) li = i; });
   try { window.__lsCurLyric = (lyrics[li] && lyrics[li].line) || ''; } catch (e) {}
@@ -708,7 +717,20 @@ function LSFullCenter({ song, cur, dur, isPlaying, loved, ncmQueue, ncmLyric, pl
       <div className="fc-body" ref={fcLyBox} onScroll={fcScroll}>
         {tab === 'lyrics' && (<div className="fc-lyrics">{lyrics.length ? lyrics.map(function (l, i) { return <div key={i} className={'ll' + (i === li ? ' on' : '')} onClick={function () { if (lpRef.current.fired) { lpRef.current.fired = false; return; } try { window.__lsAudioEl.currentTime = l.t; } catch (e) {} }} onPointerDown={lpStart(l.line)} onPointerUp={lpEnd} onPointerLeave={lpEnd} onPointerMove={lpEnd}>{l.line}</div>; }) : <div className="fc-empty">暂无歌词</div>}</div>)}
         {tab === 'search' && (<div className="fc-queue"><div className="fc-search"><input value={q} onChange={function (e) { setQ(e.target.value); }} onKeyDown={function (e) { if (e.key === 'Enter') doSearch(); }} placeholder="搜歌名 / 歌手" /><button onClick={doSearch}>搜</button></div>{searching ? <div className="fc-empty">搜索中…</div> : results.length ? results.map(function (s, i) { return <div key={s.id} className="qrow" onClick={function () { if (window.__lsPlayNcm) window.__lsPlayNcm(s, results, i); }}><span className="no">{i + 1 < 10 ? '0' + (i + 1) : i + 1}</span><div className="si"><b>{s.title}</b><i>{s.artist}</i></div><span className="pl-ic">{LSIcon.play()}</span></div>; }) : <div className="fc-empty">搜歌名或歌手,点一首一起听</div>}</div>)}
-        {tab === 'playlists' && (<div className="fc-queue">{openPl ? (<div><div className="fc-subbar"><button onClick={function () { setOpenPl(null); }}>‹ 返回</button><b>{openPl.name}</b></div>{tracks.length ? tracks.map(function (s, i) { return <div key={s.id} className="qrow" onClick={function () { if (window.__lsPlayNcm) window.__lsPlayNcm(s, tracks, i); }}><span className="no">{i + 1 < 10 ? '0' + (i + 1) : i + 1}</span><div className="si"><b>{s.title}</b><i>{s.artist}</i></div><span className="pl-ic">{LSIcon.play()}</span></div>; }) : <div className="fc-empty">加载中…</div>}</div>) : (playlists === null ? <div className="fc-empty">加载歌单…</div> : playlists.length ? playlists.map(function (pl) { return <div key={pl.id} className="qrow" onClick={function () { openPlaylist(pl); }}><div className="pl-cv"><LSCover cover={pl.cover} shape="rounded" radius={8} size={80} /></div><div className="si"><b>{pl.name}</b><i>{pl.count} 首</i></div><span className="pl-ic">›</span></div>; }) : <div className="fc-empty">还没有歌单</div>)}</div>)}
+        {tab === 'playlists' && (<div className="fc-queue">{openPl ? (<div><div className="fc-subbar"><button onClick={function () { setOpenPl(null); }}>‹ 返回</button><b>{openPl.name}{openPl.local ? ' · 本地' : ''}</b></div>{tracks.length ? tracks.map(function (s, i) { return <div key={s.id} className="qrow" onClick={function () { if (window.__lsPlayNcm) window.__lsPlayNcm(s, tracks, i); }}><span className="no">{i + 1 < 10 ? '0' + (i + 1) : i + 1}</span><div className="si"><b>{s.title}</b><i>{s.artist}</i></div><span className="pl-ic">{LSIcon.play()}</span></div>; }) : <div className="fc-empty">加载中…</div>}</div>) : (
+          <div>
+            {(localPlaylists === null && playlists === null) ? <div className="fc-empty">加载歌单…</div> : null}
+            {localPlaylists && localPlaylists.length ? (<>
+              <div className="fc-subbar" style={{ padding: '4px 8px 4px', fontSize: 11, color: 'var(--ls-ink-dim)' }}>本地歌单</div>
+              {localPlaylists.map(function (pl) { return <div key={'lp_' + pl.id} className="qrow" onClick={function () { openPlaylist({ id: pl.id, name: pl.name, cover: pl.cover, local: true }); }}><div className="pl-cv"><LSCover cover={pl.cover} shape="rounded" radius={8} size={80} /></div><div className="si"><b>{pl.name}</b><i>{pl.count} 首 · 本地</i></div><span className="pl-ic">›</span></div>; })}
+            </>) : null}
+            {playlists && playlists.length ? (<>
+              <div className="fc-subbar" style={{ padding: '4px 8px 4px', fontSize: 11, color: 'var(--ls-ink-dim)' }}>网易云歌单</div>
+              {playlists.map(function (pl) { return <div key={'np_' + pl.id} className="qrow" onClick={function () { openPlaylist(pl); }}><div className="pl-cv"><LSCover cover={pl.cover} shape="rounded" radius={8} size={80} /></div><div className="si"><b>{pl.name}</b><i>{pl.count} 首</i></div><span className="pl-ic">›</span></div>; })}
+            </>) : null}
+            {(localPlaylists && !localPlaylists.length && playlists && !playlists.length) ? <div className="fc-empty">还没有歌单——去个人页「＋新建本地歌单」开一个</div> : null}
+          </div>
+        )}</div>)}
         {tab === 'queue' && (<div className="fc-queue">{(ncmQueue && ncmQueue.list && ncmQueue.list.length) ? ncmQueue.list.map(function (s, i) { return <div key={i} className={'qrow' + (i === ncmQueue.idx ? ' on' : '')} onClick={function () { if (playNcmIdx) playNcmIdx(i); }}><span className="no">{i + 1 < 10 ? '0' + (i + 1) : i + 1}</span><div className="si"><b>{s.title}</b><i>{s.artist}</i></div>{i === ncmQueue.idx && <span className="bars"><i></i><i></i><i></i></span>}</div>; }) : <div className="fc-empty">待播队列还空着</div>}</div>)}
       </div>
     </div>
