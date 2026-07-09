@@ -1226,7 +1226,8 @@ input, textarea { font: inherit; color: inherit; }
 .ls-dr-toast{position:absolute;bottom:24px;left:50%;transform:translateX(-50%);background:rgba(40,36,42,.92);color:#fff;padding:8px 18px;border-radius:20px;font-family:var(--ls-cn);font-size:13px;z-index:30;white-space:nowrap}
 .ls-app .ls-arc-card.compact{background:transparent}
 .ls-savepick-mask{position:fixed;inset:0;z-index:9500;background:rgba(0,0,0,.35);display:flex;align-items:flex-end;justify-content:center}
-.ls-savepick{width:100%;max-width:440px;max-height:70%;background:color-mix(in srgb,var(--ls-bg,#efece7) 15%,#fff);border-radius:22px 22px 0 0;padding:20px 20px calc(18px + env(safe-area-inset-bottom));display:flex;flex-direction:column}
+.ls-savepick{width:100%;max-width:440px;max-height:70%;background:var(--ls-panel,#fff);color:var(--ls-ink);border-top:1px solid var(--ls-line-soft);box-shadow:0 -12px 40px var(--ls-shadow,rgba(0,0,0,.25));border-radius:22px 22px 0 0;padding:20px 20px calc(18px + env(safe-area-inset-bottom));display:flex;flex-direction:column}
+.ls-savepick .sp-cat{font-family:var(--ls-cn);font-size:11px;font-weight:600;color:var(--ls-ink-dim);letter-spacing:.4px;padding:8px 4px 4px;text-transform:none}
 .ls-savepick .hd{font-family:var(--ls-cn);font-size:16px;font-weight:600;color:var(--ls-ink);text-align:center;margin-bottom:4px}
 .ls-savepick .sp-song{font-family:var(--ls-cn);font-size:12px;color:var(--ls-ink-dim);text-align:center;margin-bottom:14px}
 .ls-savepick .sp-list{flex:1;overflow-y:auto;scrollbar-width:none}
