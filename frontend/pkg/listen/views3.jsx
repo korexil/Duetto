@@ -44,8 +44,10 @@ function LSBrowseView({ onPlay, onOpenSong, onOpenFM }) {
   const localResults = q.trim()
     ? LS_SONGS.filter(s => (s.title + s.artist + s.album).toLowerCase().includes(q.trim().toLowerCase()))
     : null;
-  const results = ncmLogged ? (q.trim() ? ncmResults : null) : localResults;
-  const artists = (ncmLogged && q.trim()) ? ncmArtists : null;
+  /* 2026-07-09：让匿名/未登录也能看到网易云搜索结果（unblock 已在后端解灰）。
+     有关键词 → 优先显示 ncmResults；ncmResults 为空则回退到本地曲库搜索。 */
+  const results = q.trim() ? (ncmResults && ncmResults.length ? ncmResults : localResults) : null;
+  const artists = q.trim() ? ncmArtists : null;
 
   return (
     <div className="ls-body ls-browse">
