@@ -5,6 +5,7 @@
 const { useState: aUseState, useEffect: aUseEffect, useRef: aUseRef } = React;
 
 const LS_SKINS = [
+  { id: 'yueguang', name: '月光',     po: 'moonlight',    bg: '#07060c', ac: '#d9b98c' },  /* 2026-07-09：v2 面板月夜风格·紫金 */
   { id: 'ningzhi',  name: '凝脂',     po: 'cool cream',   bg: '#efece7', ac: '#b29a6e' },
   { id: 'douqing',  name: '豆青',     po: 'sage light',   bg: '#eaede2', ac: '#8a9a6b' },
   { id: 'xueqing',  name: '雪青',     po: 'misty violet', bg: '#f0f1fa', ac: '#8f93c9' },
@@ -32,10 +33,10 @@ function lsPrefetchNext(){
 }
 var LS_DEMO_SRC = [];
 function LSApp() {
-  const [skin, setSkin] = aUseState(() => { try { return localStorage.getItem('ls-skin') || 'ningzhi'; } catch (e) { return 'ningzhi'; } });
+  const [skin, setSkin] = aUseState(() => { try { return localStorage.getItem('ls-skin') || 'yueguang'; } catch (e) { return 'yueguang'; } });  /* 2026-07-09 默认月光皮肤（v2 月夜风格）*/
   const [customAc, setCustomAc] = aUseState(() => localStorage.getItem('ls-skin-custom') || '#c99bb0');
   const [customVars, setCustomVars] = aUseState(() => { try { return JSON.parse(localStorage.getItem('ls-skin-diy') || '{}'); } catch (e) { return {}; } });
-  const [darkMode, setDarkMode] = aUseState(() => { try { const v = localStorage.getItem('ls-dark'); return v === null ? true : v === '1'; } catch (e) { return true; } });  /* 2026-07-09 默认暗色（v2 月夜风格），已有偏好尊重 */
+  const [darkMode, setDarkMode] = aUseState(() => { try { return localStorage.getItem('ls-dark') === '1'; } catch (e) { return false; } });  /* darkMode 只做全局覆盖 opt-in；月光皮肤本身就是暗色，不需要覆盖 */
   const [view, setView] = aUseState('player');         // player | playlist | browse | together
   const [idx, setIdx]   = aUseState(0);
   const [playing, setPlaying] = aUseState(false);

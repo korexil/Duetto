@@ -19,6 +19,17 @@ input, textarea { font: inherit; color: inherit; }
 
 /* ════════════ 四套皮肤 ════════════ */
 /* 月白 — 奶白灰 · 清冷高级感（默认）*/
+/* 月光 — v2 月夜风格 · 深空紫 + 暖金 · 2026-07-09 加，默认皮肤 */
+.ls-skin-yueguang {
+  --ls-bg: #07060c; --ls-bg2: #0f0d18;
+  --ls-panel: #12101c; --ls-panel2: #17141f;
+  --ls-ink: #f2effa; --ls-ink-dim: #9d96ad; --ls-ink-faint: #7d7689;
+  --ls-line: rgba(255,255,255,.09); --ls-line-soft: rgba(255,255,255,.06);
+  --ls-gold: #d9b98c; --ls-eve: #9a72ff;
+  --ls-shadow: rgba(0,0,0,.5); --ls-glow: rgba(154,114,255,.35);
+  --ls-amb: radial-gradient(1000px 620px at 22% 6%, rgba(32,42,92,.35) 0%, transparent 60%),
+            radial-gradient(900px 720px at 84% 96%, rgba(154,114,255,.10) 0%, transparent 62%), #07060c;
+}
 .ls-skin-ningzhi {
   --ls-bg: #efece7; --ls-bg2: #e6e2db;
   --ls-panel: #f8f6f2; --ls-panel2: #efebe4;

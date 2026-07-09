@@ -203,6 +203,37 @@ function LSPlaylistView(props) {
     setOpenTracks([]);
     fetch(LSAPI + '/ncm/playlist?id=' + pl.id).then(r => r.json()).then(d => { if (d && d.songs) setOpenTracks(d.songs); }).catch(() => {});
   };
+  // 2026-07-09 本地歌单（不用网易云账号，复刻功能）
+  const [localPlaylists, setLocalPlaylists] = v3UseState(null);
+  const [newLpName, setNewLpName] = v3UseState('');
+  const [showNewLp, setShowNewLp] = v3UseState(false);
+  const [renameLpId, setRenameLpId] = v3UseState('');
+  const [renameLpVal, setRenameLpVal] = v3UseState('');
+  const loadLocalPls = () => { fetch(LSAPI + '/local/playlists').then(r => r.json()).then(d => setLocalPlaylists((d && d.playlists) || [])).catch(() => setLocalPlaylists([])); };
+  v3UseEffect(() => { loadLocalPls(); }, []);
+  v3UseEffect(() => { window.__lsReloadLocalPls = loadLocalPls; return () => { if (window.__lsReloadLocalPls === loadLocalPls) delete window.__lsReloadLocalPls; }; });
+  const createLocalPl = () => {
+    const nm = String(newLpName || '').trim();
+    if (!nm) { setShowNewLp(false); return; }
+    fetch(LSAPI + '/local/playlist/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: nm }) })
+      .then(r => r.json()).then(d => { if (d && d.ok) { setNewLpName(''); setShowNewLp(false); loadLocalPls(); } }).catch(() => {});
+  };
+  const openLocalPl = (pl) => {
+    setOpenPl({ id: pl.id, name: pl.name, local: true });
+    setOpenTracks([]);
+    fetch(LSAPI + '/local/playlist?id=' + encodeURIComponent(pl.id)).then(r => r.json()).then(d => { if (d && d.songs) setOpenTracks(d.songs); }).catch(() => {});
+  };
+  const deleteLocalPl = (pl) => {
+    if (!window.confirm('删除本地歌单「' + pl.name + '」？（里面的歌不会从其他地方消失）')) return;
+    fetch(LSAPI + '/local/playlist/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: pl.id }) })
+      .then(r => r.json()).then(d => { if (d && d.ok) loadLocalPls(); }).catch(() => {});
+  };
+  const renameLocalPl = () => {
+    const nm = String(renameLpVal || '').trim();
+    if (!nm || !renameLpId) { setRenameLpId(''); setRenameLpVal(''); return; }
+    fetch(LSAPI + '/local/playlist/rename', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: renameLpId, name: nm }) })
+      .then(r => r.json()).then(d => { if (d && d.ok) { setRenameLpId(''); setRenameLpVal(''); loadLocalPls(); } }).catch(() => { setRenameLpId(''); setRenameLpVal(''); });
+  };
 
   // R8 真实：最近播放 / 排行榜（登录后拉真数据；未登录为空状态）
   const [ncmRecent, setNcmRecent] = v3UseState(null);   // 真实最近播放（null=未加载）
@@ -274,6 +305,61 @@ function LSPlaylistView(props) {
 
   // R9 歌单点开：展开面板列出曲目（songs 是 id 数组，映射到 LS_SONGS）
   if (openPl) {
+    if (openPl.local) {
+      const selArr = openTracks.filter(s => selIds[s.id]);
+      const exitSel = () => { setSelMode(false); setSelIds({}); };
+      const batchRemove = () => {
+        const targets = selArr.slice();
+        let done = 0;
+        targets.forEach(s => {
+          fetch(LSAPI + '/local/playlist/remove', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pid: openPl.id, id: s.id }) })
+            .then(r => r.json()).then(() => { done++; if (done === targets.length) { setOpenTracks(ts => ts.filter(x => !selIds[x.id])); exitSel(); setDelConfirm(false); loadLocalPls(); } })
+            .catch(() => { done++; if (done === targets.length) { exitSel(); setDelConfirm(false); } });
+        });
+      };
+      const allOn = openTracks.length > 0 && openTracks.every(s => selIds[s.id]);
+      return (
+        <div className="ls-body ls-profile">
+          <div className="ls-sec-h ls-subback" onClick={() => { setOpenPl(null); setOpenTracks([]); exitSel(); }}>← {openPl.name} · 本地</div>
+          {openTracks.length ? (
+            <div className="ls-pl-actions">
+              <button className="primary" onClick={() => { if (window.__lsPlayNcm) window.__lsPlayNcm(openTracks[0], openTracks, 0); }}>{LSIcon.play({ width: 17, height: 17 })}播放全部</button>
+              <button onClick={() => { if (window.__lsQueueAppend) window.__lsQueueAppend(openTracks); }}>加入播放列表</button>
+              <button className={selMode ? 'selon' : ''} onClick={() => { selMode ? exitSel() : setSelMode(true); }}>{selMode ? '取消' : '批量'}</button>
+            </div>
+          ) : null}
+          {openTracks.length
+            ? openTracks.map((s, i) => (
+                <div className="ls-songrow" key={(s.id || i) + '_lp_' + i} onClick={() => { if (selMode) setSelIds(o => Object.assign({}, o, { [s.id]: !o[s.id] })); else if (window.__lsOpenNcmSong) window.__lsOpenNcmSong(s); else playNcm(s, openTracks, i); }}>
+                  {selMode ? <span className={'selc' + (selIds[s.id] ? ' on' : '')}></span> : <span className="no">{String(i + 1).padStart(2, '0')}</span>}
+                  <div className="cv"><LSCover cover={s.cover} size={100} /></div>
+                  <div className="si"><b>{s.title}</b><i>{s.artist}</i></div>
+                </div>
+              ))
+            : <div className="ls-empty"><div className="e-t">空歌单</div><div className="e-s">在任何一首歌上点「⋯ · 加歌单」把它放进来</div></div>}
+          {selMode && (
+            <div className="ls-batchbar">
+              <button onClick={() => { if (allOn) { setSelIds({}); } else { const all = {}; openTracks.forEach(s => { all[s.id] = true; }); setSelIds(all); } }}>{allOn ? '全不选' : '全选'}</button>
+              <button disabled={!selArr.length} onClick={() => { if (window.__lsPlayNcm) window.__lsPlayNcm(selArr[0], selArr, 0); exitSel(); }}>播放</button>
+              <button disabled={!selArr.length} onClick={() => { if (window.__lsQueueAppend) window.__lsQueueAppend(selArr); exitSel(); }}>加列表</button>
+              <button disabled={!selArr.length} className="dgr" onClick={() => setDelConfirm(true)}>移出歌单</button>
+              <span className="cnt">{selArr.length ? selArr.length + ' 首' : ''}</span>
+            </div>
+          )}
+          {delConfirm && (
+            <div className="ls-rset-mask spc-mask" onClick={() => setDelConfirm(false)}>
+              <div className="spc" onClick={e => e.stopPropagation()}>
+                <div className="spc-t">从「{openPl.name}」移出选中的 {selArr.length} 首？</div>
+                <div className="spc-btns">
+                  <button className="no" onClick={() => setDelConfirm(false)}>取消</button>
+                  <button className="yes" onClick={batchRemove}>移出</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
     if (openPl.ncm) {
       const selArr = openTracks.filter(s => selIds[s.id]);
       const exitSel = () => { setSelMode(false); setSelIds({}); };
@@ -498,6 +584,39 @@ function LSPlaylistView(props) {
             <div className="ls-sec-h" style={{ padding: 0 }}>已连接 · {ncmUser}</div>
             <button className="ls-q-btn" onClick={doLogout} style={{ fontSize: 11, fontWeight: 500, padding: '3px 12px' }}>断开</button>
           </div>
+        )}
+      </div>
+
+      {/* 本地歌单（不用登录·2026-07-09 加） */}
+      <div className="ls-pf-section">
+        <div className="ls-sec-h" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span>本地歌单 {localPlaylists ? localPlaylists.length : ''}</span>
+          <button className="ls-q-btn" onClick={() => { setShowNewLp(true); setNewLpName(''); }} style={{ fontSize: 11, fontWeight: 500, padding: '3px 12px' }}>＋新建</button>
+        </div>
+        {showNewLp && (
+          <div style={{ display: 'flex', gap: 8, padding: '6px 4px 10px' }}>
+            <input autoFocus value={newLpName} onChange={e => setNewLpName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') createLocalPl(); if (e.key === 'Escape') { setShowNewLp(false); setNewLpName(''); } }} placeholder="歌单名字（比如：给你听的）" maxLength={60} style={{ flex: 1, background: 'var(--ls-panel2)', color: 'var(--ls-ink)', border: '1px solid var(--ls-line)', borderRadius: 8, padding: '8px 10px', fontSize: 13 }} />
+            <button onClick={createLocalPl} style={{ background: 'var(--ls-gold)', color: '#000', border: 'none', borderRadius: 8, padding: '8px 14px', fontSize: 13, cursor: 'pointer' }}>建</button>
+            <button onClick={() => { setShowNewLp(false); setNewLpName(''); }} style={{ background: 'transparent', color: 'var(--ls-ink-dim)', border: 'none', padding: '8px 10px', fontSize: 13, cursor: 'pointer' }}>取消</button>
+          </div>
+        )}
+        {localPlaylists === null ? (
+          <div className="ls-empty"><div className="e-t">加载中…</div></div>
+        ) : localPlaylists.length ? localPlaylists.map(pl => (
+          <div className="ls-pl-row" key={'lp_' + pl.id} onClick={() => openLocalPl(pl)}>
+            <div className="cv"><LSCover cover={pl.cover} size={120} radius={10} /></div>
+            <div className="si">
+              {renameLpId === pl.id ? (
+                <input autoFocus value={renameLpVal} onClick={e => e.stopPropagation()} onChange={e => setRenameLpVal(e.target.value)} onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') renameLocalPl(); if (e.key === 'Escape') { setRenameLpId(''); setRenameLpVal(''); } }} onBlur={renameLocalPl} maxLength={60} style={{ background: 'var(--ls-panel2)', color: 'var(--ls-ink)', border: '1px solid var(--ls-gold)', borderRadius: 6, padding: '4px 8px', fontSize: 13, width: '90%' }} />
+              ) : (
+                <b>{pl.name}</b>
+              )}
+              <i>{pl.count} 首 · 本地</i>
+            </div>
+            <button className="ls-lp-more" onClick={e => { e.stopPropagation(); const ch = window.prompt('本地歌单操作：\n1 = 重命名\n2 = 删除\n（其他键取消）', '1'); if (ch === '1') { setRenameLpId(pl.id); setRenameLpVal(pl.name); } else if (ch === '2') { deleteLocalPl(pl); } }} style={{ background: 'none', border: 'none', color: 'var(--ls-ink-dim)', fontSize: 18, padding: '0 6px', cursor: 'pointer' }}>⋯</button>
+          </div>
+        )) : (
+          <div className="ls-empty"><div className="e-t">还没有本地歌单</div><div className="e-s">点右上「＋新建」开一个，然后从搜索/日推/排行里加歌进去</div></div>
         )}
       </div>
 

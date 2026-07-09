@@ -40,6 +40,10 @@ CREATE INDEX IF NOT EXISTS idx_impr_song ON song_impressions(song_id, ts);
 CREATE TABLE IF NOT EXISTS room_events(room TEXT, msg TEXT, ts INTEGER);
 CREATE INDEX IF NOT EXISTS idx_events_room ON room_events(room, ts);
 CREATE TABLE IF NOT EXISTS songs(id TEXT PRIMARY KEY, title TEXT, artist TEXT DEFAULT '', cover TEXT DEFAULT '', lyrics TEXT DEFAULT '', listen_count INTEGER DEFAULT 0, notes_count INTEGER DEFAULT 0, first_listened_at INTEGER DEFAULT 0, last_listened_at INTEGER DEFAULT 0, mem_summary TEXT DEFAULT '', mem_summary_n INTEGER DEFAULT 0, mem_summary_at INTEGER DEFAULT 0, created_at INTEGER, updated_at INTEGER);
+-- 2026-07-09 本地歌单（复刻网易云歌单，老虚没账号也能用）
+CREATE TABLE IF NOT EXISTS local_playlists(id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at INTEGER, updated_at INTEGER);
+CREATE TABLE IF NOT EXISTS local_playlist_songs(pl_id TEXT, song_id TEXT, title TEXT DEFAULT '', artist TEXT DEFAULT '', cover TEXT DEFAULT '', ord INTEGER DEFAULT 0, added_at INTEGER, PRIMARY KEY(pl_id, song_id));
+CREATE INDEX IF NOT EXISTS idx_lps_pl ON local_playlist_songs(pl_id, ord);
 `);
 // songs 回填：已有流水/印象长出主表行（幂等：只补不存在的）
 try {
@@ -346,6 +350,66 @@ app.post('/api/ncm/playlist-add', async (q,r)=>{ try{ await ncm.playlist_tracks(
 app.post('/api/ncm/playlist-del', async (q,r)=>{ try{ await ncm.playlist_tracks({ op:'del', pid:q.query.pid, tracks:q.query.id, cookie:ncmCookie }); r.json({ ok:true }); }catch(e){ r.status(500).json({ok:false,error:String(e.message||e)}); } });
 app.post('/api/ncm/like', async (q,r)=>{ try{ await ncm.like({ id:q.query.id, like:(q.query.like==='1'||q.query.like==='true'), cookie:ncmCookie }); r.json({ ok:true }); }catch(e){ r.status(500).json({ok:false,error:String(e.message||e)}); } });
 app.get('/api/ncm/likelist', async (_q,r)=>{ try{ const p=await ncmProfile(); if(!p) return r.json({ok:true,logged:false,ids:[]}); const ll=await ncm.likelist({ uid:p.userId, cookie:ncmCookie }); r.json({ ok:true, ids:(ll.body&&ll.body.ids)||[] }); }catch(e){ r.status(500).json({ok:false,error:String(e.message||e)}); } });
+
+// —— 本地歌单：无需网易云账号，复刻歌单基础功能 · 2026-07-09 加 ——
+function _lpId(){ return 'lp_' + crypto.randomBytes(6).toString('hex'); }
+function _lpCoverFor(pid){
+  try {
+    const row = db.prepare("SELECT cover FROM local_playlist_songs WHERE pl_id=? AND cover<>'' ORDER BY ord ASC, added_at ASC LIMIT 1").get(pid);
+    return (row && row.cover) || '';
+  } catch(e){ return ''; }
+}
+app.get('/api/local/playlists', (_q,r)=>{ try{
+  const rows = db.prepare('SELECT id,name,created_at,updated_at,(SELECT COUNT(*) FROM local_playlist_songs WHERE pl_id=local_playlists.id) AS count FROM local_playlists ORDER BY updated_at DESC').all();
+  for(const x of rows){ x.cover = _lpCoverFor(x.id); }
+  r.json({ ok:true, playlists: rows });
+}catch(e){ r.status(500).json({ok:false,error:e.message}); } });
+app.post('/api/local/playlist/create', (q,r)=>{ try{
+  const name = String((q.body||{}).name||'').trim().slice(0,60);
+  if (!name) return r.status(400).json({ ok:false, error:'name required' });
+  const id = _lpId(); const now = Date.now();
+  db.prepare('INSERT INTO local_playlists(id,name,created_at,updated_at) VALUES(?,?,?,?)').run(id, name, now, now);
+  r.json({ ok:true, id, name });
+}catch(e){ r.status(500).json({ok:false,error:e.message}); } });
+app.post('/api/local/playlist/rename', (q,r)=>{ try{
+  const b = q.body||{}; const id = String(b.id||''); const name = String(b.name||'').trim().slice(0,60);
+  if (!id || !name) return r.status(400).json({ ok:false, error:'id + name required' });
+  db.prepare('UPDATE local_playlists SET name=?, updated_at=? WHERE id=?').run(name, Date.now(), id);
+  r.json({ ok:true });
+}catch(e){ r.status(500).json({ok:false,error:e.message}); } });
+app.post('/api/local/playlist/delete', (q,r)=>{ try{
+  const id = String((q.body||{}).id||'');
+  if (!id) return r.status(400).json({ ok:false, error:'id required' });
+  db.prepare('DELETE FROM local_playlist_songs WHERE pl_id=?').run(id);
+  db.prepare('DELETE FROM local_playlists WHERE id=?').run(id);
+  r.json({ ok:true });
+}catch(e){ r.status(500).json({ok:false,error:e.message}); } });
+app.get('/api/local/playlist', (q,r)=>{ try{
+  const id = String(q.query.id||'');
+  if (!id) return r.status(400).json({ ok:false, error:'id required' });
+  const meta = db.prepare('SELECT id,name,created_at,updated_at FROM local_playlists WHERE id=?').get(id);
+  if (!meta) return r.status(404).json({ ok:false, error:'not found' });
+  const songs = db.prepare('SELECT song_id AS id, title, artist, cover, ord, added_at FROM local_playlist_songs WHERE pl_id=? ORDER BY ord ASC, added_at ASC').all(id);
+  r.json({ ok:true, playlist: meta, songs });
+}catch(e){ r.status(500).json({ok:false,error:e.message}); } });
+app.post('/api/local/playlist/add', (q,r)=>{ try{
+  const b = q.body||{}; const pid = String(b.pid||''); const sid = String(b.id||b.song_id||'');
+  if (!pid || !sid) return r.status(400).json({ ok:false, error:'pid + id required' });
+  if (!db.prepare('SELECT 1 FROM local_playlists WHERE id=?').get(pid)) return r.status(404).json({ ok:false, error:'playlist not found' });
+  const now = Date.now();
+  const cv = normCover(b.cover||'');
+  const maxOrd = db.prepare('SELECT COALESCE(MAX(ord),0) AS m FROM local_playlist_songs WHERE pl_id=?').get(pid).m;
+  db.prepare("INSERT INTO local_playlist_songs(pl_id,song_id,title,artist,cover,ord,added_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(pl_id,song_id) DO UPDATE SET title=excluded.title, artist=excluded.artist, cover=CASE WHEN excluded.cover<>'' THEN excluded.cover ELSE local_playlist_songs.cover END").run(pid, sid, String(b.title||''), String(b.artist||''), cv, maxOrd+1, now);
+  db.prepare('UPDATE local_playlists SET updated_at=? WHERE id=?').run(now, pid);
+  r.json({ ok:true });
+}catch(e){ r.status(500).json({ok:false,error:e.message}); } });
+app.post('/api/local/playlist/remove', (q,r)=>{ try{
+  const b = q.body||{}; const pid = String(b.pid||''); const sid = String(b.id||b.song_id||'');
+  if (!pid || !sid) return r.status(400).json({ ok:false, error:'pid + id required' });
+  db.prepare('DELETE FROM local_playlist_songs WHERE pl_id=? AND song_id=?').run(pid, sid);
+  db.prepare('UPDATE local_playlists SET updated_at=? WHERE id=?').run(Date.now(), pid);
+  r.json({ ok:true });
+}catch(e){ r.status(500).json({ok:false,error:e.message}); } });
 // —— Room timeline persistence: append-only JSONL, zero deps ——
 function appendEvent(ev){ try { db.prepare('INSERT INTO room_events(room,msg,ts) VALUES(?,?,?)').run(String(ev.room||'main'), JSON.stringify(ev.msg||{}), ev.ts||Date.now()); } catch(e){} }
 function readEvents(room, limit){ try { const rows = db.prepare('SELECT msg, ts FROM room_events WHERE room=? ORDER BY ts DESC, rowid DESC LIMIT ?').all(String(room), Number(limit)||120); return rows.map(r=>{ try{ const o=JSON.parse(r.msg); if(o && o.ts==null) o.ts=r.ts; return o; }catch(e){ return null; } }).filter(Boolean).reverse(); } catch(e) { return []; } }

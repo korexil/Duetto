@@ -394,7 +394,7 @@ function LSPlayerView({ idx, setIdx, playing, setPlaying, cur, setCur, loved, se
         }}>
           <svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-10-9.2C.4 8.6 2 5 5.4 5c2 0 3.3 1.1 4.1 2.3C10.3 6.1 11.6 5 13.6 5 17 5 18.6 8.6 17 11.8 14.5 16.4 12 21 12 21z"/></svg>
         </button>
-        <button className="eb" onClick={() => { if (song && song.id && /^\d+$/.test(String(song.id)) && window.__lsSavePicker) { window.__lsSavePicker(song); } else { flash('这首暂不能收藏'); } }}>
+        <button className="eb" title="加入歌单" onClick={() => { if (song && song.id && window.__lsSavePicker) { window.__lsSavePicker(song); } else { flash('这首暂不能收藏'); } }}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M6 4h12a1 1 0 0 1 1 1v16l-7-4-7 4V5a1 1 0 0 1 1-1z"/></svg>
         </button>
         <button className="eb" onClick={() => onOpenComments && onOpenComments(song)}>
@@ -1312,24 +1312,67 @@ function LSFocusOverlay({ wid, idx, playing, setPlaying, onClose }) {
 }
 
 function LSSavePicker({ song, onClose }) {
-  const [pls, setPls] = vUseState(null);
+  const [ncmPls, setNcmPls] = vUseState(null);   // 网易云歌单（未登录=[]）
+  const [localPls, setLocalPls] = vUseState(null); // 本地歌单
   const [msg, setMsg] = vUseState('');
+  const [naming, setNaming] = vUseState(false);
+  const [newName, setNewName] = vUseState('');
   const base = window.__LS_API || '/api';
-  // 支持单曲或多曲（批量收藏传数组）
   const songs = Array.isArray(song) ? song : [song];
   const ids = songs.map(function (s) { return s.id; }).join(',');
-  vUseEffect(function () { fetch(base + '/ncm/playlists').then(function (r) { return r.json(); }).then(function (d) { setPls((d && d.playlists) || []); }).catch(function () { setPls([]); }); }, []);
-  const add = function (pl) { fetch(base + '/ncm/playlist-add?pid=' + pl.id + '&id=' + ids, { method: 'POST' }).then(function (r) { return r.json(); }).then(function (d) { setMsg((d && d.ok) ? ('已收藏到「' + pl.name + '」') : '收藏失败'); if (d && d.ok && window.__lsRoomEvent && songs[0] && songs[0].title) window.__lsRoomEvent('把《' + songs[0].title + '》' + (songs.length > 1 ? ('等 ' + songs.length + ' 首') : '') + '收进了歌单「' + pl.name + '」'); setTimeout(onClose, 1200); }).catch(function () { setMsg('收藏失败'); }); };
+  const reloadLocal = function () { fetch(base + '/local/playlists').then(function (r) { return r.json(); }).then(function (d) { setLocalPls((d && d.playlists) || []); }).catch(function () { setLocalPls([]); }); };
+  vUseEffect(function () {
+    fetch(base + '/ncm/playlists').then(function (r) { return r.json(); }).then(function (d) { setNcmPls((d && d.playlists) || []); }).catch(function () { setNcmPls([]); });
+    reloadLocal();
+  }, []);
+  const addNcm = function (pl) { fetch(base + '/ncm/playlist-add?pid=' + pl.id + '&id=' + ids, { method: 'POST' }).then(function (r) { return r.json(); }).then(function (d) { setMsg((d && d.ok) ? ('已收藏到「' + pl.name + '」') : '收藏失败'); if (d && d.ok && window.__lsRoomEvent && songs[0] && songs[0].title) window.__lsRoomEvent('把《' + songs[0].title + '》' + (songs.length > 1 ? ('等 ' + songs.length + ' 首') : '') + '收进了歌单「' + pl.name + '」'); setTimeout(onClose, 1200); }).catch(function () { setMsg('收藏失败'); }); };
+  const addLocal = function (pl) {
+    let done = 0, fail = 0;
+    const tick = function () { if (done + fail === songs.length) { const ok = fail === 0; setMsg(ok ? ('已加入本地歌单「' + pl.name + '」') : ('本地歌单加入失败 ' + fail + ' 首')); if (ok && window.__lsRoomEvent && songs[0] && songs[0].title) window.__lsRoomEvent('把《' + songs[0].title + '》' + (songs.length > 1 ? ('等 ' + songs.length + ' 首') : '') + '加进了本地歌单「' + pl.name + '」'); setTimeout(onClose, 1200); } };
+    songs.forEach(function (s) {
+      fetch(base + '/local/playlist/add', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pid: pl.id, id: s.id, title: s.title || '', artist: s.artist || '', cover: s.cover || '' }) })
+        .then(function (r) { return r.json(); }).then(function (d) { if (d && d.ok) done++; else fail++; tick(); })
+        .catch(function () { fail++; tick(); });
+    });
+  };
+  const createLocal = function () {
+    const nm = String(newName || '').trim();
+    if (!nm) { setNaming(false); return; }
+    fetch(base + '/local/playlist/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: nm }) })
+      .then(function (r) { return r.json(); }).then(function (d) {
+        if (d && d.ok) { setNaming(false); setNewName(''); addLocal({ id: d.id, name: d.name }); }
+        else { setMsg('创建歌单失败'); }
+      }).catch(function () { setMsg('创建歌单失败'); });
+  };
   return (
     <div className="ls-savepick-mask" onClick={onClose}>
       <div className="ls-savepick" onClick={function (e) { e.stopPropagation(); }}>
-        <div className="hd">收藏到歌单</div>
+        <div className="hd">加入歌单</div>
         <div className="sp-song">{songs.length > 1 ? ('已选 ' + songs.length + ' 首') : (songs[0].title + (songs[0].artist ? ' · ' + songs[0].artist : ''))}</div>
         {msg ? <div className="sp-msg">{msg}</div> : (
           <div className="sp-list">
-            {pls === null ? <div className="sp-empty">加载歌单…</div> : pls.length ? pls.map(function (pl) {
-              return <div key={pl.id} className="sp-row" onClick={function () { add(pl); }}><div className="cv"><LSCover cover={pl.cover} shape="rounded" radius={8} size={80} /></div><div className="si"><b>{pl.name}</b><i>{pl.count} 首</i></div></div>;
-            }) : <div className="sp-empty">还没有歌单</div>}
+            {/* 本地歌单区 —— 不用登录也能建 */}
+            <div className="sp-cat">本地歌单（不用登录）</div>
+            {naming ? (
+              <div className="sp-row" style={{ gap: 8, padding: '10px 12px' }}>
+                <input autoFocus value={newName} onChange={function (e) { setNewName(e.target.value); }} onKeyDown={function (e) { if (e.key === 'Enter') createLocal(); if (e.key === 'Escape') { setNaming(false); setNewName(''); } }} placeholder="歌单名字" maxLength={60} style={{ flex: 1, background: 'var(--ls-panel2)', color: 'var(--ls-ink)', border: '1px solid var(--ls-line)', borderRadius: 8, padding: '8px 10px', fontSize: 13 }} />
+                <button onClick={createLocal} style={{ background: 'var(--ls-gold)', color: '#000', border: 'none', borderRadius: 8, padding: '8px 14px', fontSize: 13, cursor: 'pointer' }}>建</button>
+                <button onClick={function () { setNaming(false); setNewName(''); }} style={{ background: 'transparent', color: 'var(--ls-ink-dim)', border: 'none', padding: '8px 10px', fontSize: 13, cursor: 'pointer' }}>取消</button>
+              </div>
+            ) : (
+              <div className="sp-row" onClick={function () { setNaming(true); }} style={{ cursor: 'pointer' }}>
+                <div className="cv" style={{ width: 40, height: 40, borderRadius: 8, background: 'var(--ls-panel2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, color: 'var(--ls-gold)' }}>＋</div>
+                <div className="si"><b>新建本地歌单</b><i>存在这台服务器上·不用网易云账号</i></div>
+              </div>
+            )}
+            {(localPls || []).map(function (pl) {
+              return <div key={'l_' + pl.id} className="sp-row" onClick={function () { addLocal(pl); }}><div className="cv"><LSCover cover={pl.cover} shape="rounded" radius={8} size={80} /></div><div className="si"><b>{pl.name}</b><i>{pl.count} 首 · 本地</i></div></div>;
+            })}
+            {/* 网易云歌单区 —— 登录了才有 */}
+            {ncmPls && ncmPls.length ? <div className="sp-cat" style={{ marginTop: 10 }}>网易云歌单</div> : null}
+            {(ncmPls || []).map(function (pl) {
+              return <div key={'n_' + pl.id} className="sp-row" onClick={function () { addNcm(pl); }}><div className="cv"><LSCover cover={pl.cover} shape="rounded" radius={8} size={80} /></div><div className="si"><b>{pl.name}</b><i>{pl.count} 首</i></div></div>;
+            })}
           </div>
         )}
       </div>
