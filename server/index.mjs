@@ -5,6 +5,13 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import ncm from 'NeteaseCloudMusicApi';
+// 2026-07-09：静音 fork 内部 unblock 模块的 logger.error 噪音（xeapi/byfuns/msls 之类替代源失败）
+// 这些是 fallback 找不到源的正常情况，try/catch 已在业务层兜住；无 level 控制只能 patch logger 本身
+import { createRequire as _createRequire } from 'module';
+try {
+  const _ncmLogger = _createRequire(import.meta.url)('NeteaseCloudMusicApi/util/logger.js');
+  if (_ncmLogger && typeof _ncmLogger.error === 'function') _ncmLogger.error = () => {};
+} catch(_){}
 import crypto from 'crypto';
 import { DatabaseSync } from 'node:sqlite';
 import dns from 'dns';
