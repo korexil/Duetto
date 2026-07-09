@@ -32,7 +32,7 @@ function LSBrowseView({ onPlay, onOpenSong, onOpenFM }) {
     if (window.__ncmRecommend) window.__ncmRecommend().then(songs => { if (songs) setNcmDaily(songs); }).catch(() => {});
   }, [ncmLogged]);
   const playNcm = (song, list, i) => { if (window.__lsPlayNcm) window.__lsPlayNcm(song, list, i); else onPlay(song); };
-  const doNcmSearch = () => { const kw = q.trim(); if (!ncmLogged || !kw) return; fetch(LSAPI + '/ncm/search?kw=' + encodeURIComponent(kw)).then(r => r.json()).then(d => { if (d && d.songs) setNcmResults(d.songs); }).catch(() => {}); setOpenArtist(null); setArtistSongs([]); fetch(LSAPI + '/ncm/search-artist?kw=' + encodeURIComponent(kw)).then(r => r.json()).then(d => { if (d && d.artists) setNcmArtists(d.artists); }).catch(() => {}); };
+  const doNcmSearch = () => { const kw = q.trim(); if (!kw) return; /* 2026-07-09：拆掉 !ncmLogged 短路——匿名搜索+unblock 播放都能跑，登录只影响日推/歌单 */ fetch(LSAPI + '/ncm/search?kw=' + encodeURIComponent(kw)).then(r => r.json()).then(d => { if (d && d.songs) setNcmResults(d.songs); }).catch(() => {}); setOpenArtist(null); setArtistSongs([]); fetch(LSAPI + '/ncm/search-artist?kw=' + encodeURIComponent(kw)).then(r => r.json()).then(d => { if (d && d.artists) setNcmArtists(d.artists); }).catch(() => {}); };
   const openNcmArtist = (a) => { if (openArtist && openArtist.id === a.id) { setOpenArtist(null); setArtistSongs([]); return; } setOpenArtist({ id: a.id, name: a.name }); setArtistSongs([]); fetch(LSAPI + '/ncm/artist-songs?id=' + a.id).then(r => r.json()).then(d => { if (d && d.songs) setArtistSongs(d.songs); }).catch(() => {}); };
   const ncmRow = (s, list, i, no) => (
     <div className="ls-songrow" key={(s.id || i) + '_ncm_' + i} onClick={() => playNcm(s, list, i)}>
