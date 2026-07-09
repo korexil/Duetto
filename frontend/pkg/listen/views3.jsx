@@ -485,11 +485,13 @@ function LSPlaylistView(props) {
         ))}
       </div>
 
-      {/* R4 网易云登录入口 */}
+      {/* R4 网易云登录入口（2026-07-09：老虚没账号，改成弱化行内提示；已连接时保留原状） */}
       <div className="ls-pf-section">
         {!ncmUser ? (
-          <div style={{ textAlign: 'center', padding: '10px 8px 4px' }}>
-            <button className="ls-fm-refill" onClick={openLogin}>连接网易云账号</button>
+          <div style={{ textAlign: 'center', padding: '6px 8px 2px', fontSize: 11, color: 'var(--ls-ink-faint)' }}>
+            没网易云账号不影响听——搜歌 + 播放能用，
+            <button onClick={openLogin} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--ls-gold)', textDecoration: 'underline dotted', cursor: 'pointer', font: 'inherit' }}>点这里连账号</button>
+            后才有收藏、歌单、每日推荐
           </div>
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 2px' }}>

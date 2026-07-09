@@ -248,8 +248,9 @@ input, textarea { font: inherit; color: inherit; }
 .ls-input .send svg { width: 15px; height: 15px; fill: currentColor; }
 
 /* ── 底部导航 ──────────────────────────────────────────── */
-.ls-nav { flex-shrink: 0; display: flex; align-items: center; justify-content: space-around; padding: 10px 18px 18px;
-  border-top: 1px solid var(--ls-line-soft); background: color-mix(in srgb, var(--ls-bg) calc(var(--ls-nav-a, 0.7) * 100%), transparent); backdrop-filter: blur(var(--ls-nav-blur, 14px)); -webkit-backdrop-filter: blur(var(--ls-nav-blur, 14px)); position: relative; z-index: 7; }
+.ls-nav { flex-shrink: 0; display: flex; align-items: center; justify-content: space-around; padding: 10px 18px calc(18px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--ls-line-soft); background: color-mix(in srgb, var(--ls-bg) calc(var(--ls-nav-a, 0.7) * 100%), transparent); backdrop-filter: blur(var(--ls-nav-blur, 14px)); -webkit-backdrop-filter: blur(var(--ls-nav-blur, 14px)); position: sticky; bottom: 0; z-index: 7; }
+/* 2026-07-09：底部 tab bar 加 env(safe-area-inset-bottom) 避 Safari 底栏遮挡；position: sticky 保持在视口底部滚动时可见 */
 .ls-nav button { display: flex; flex-direction: column; align-items: center; gap: 4px; color: var(--ls-ink-faint); transition: color .2s; }
 .ls-nav button.on { color: var(--ls-gold); }
 .ls-nav button svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.6; }

@@ -35,7 +35,7 @@ function LSApp() {
   const [skin, setSkin] = aUseState(() => { try { return localStorage.getItem('ls-skin') || 'ningzhi'; } catch (e) { return 'ningzhi'; } });
   const [customAc, setCustomAc] = aUseState(() => localStorage.getItem('ls-skin-custom') || '#c99bb0');
   const [customVars, setCustomVars] = aUseState(() => { try { return JSON.parse(localStorage.getItem('ls-skin-diy') || '{}'); } catch (e) { return {}; } });
-  const [darkMode, setDarkMode] = aUseState(() => { try { return localStorage.getItem('ls-dark') === '1'; } catch (e) { return false; } });
+  const [darkMode, setDarkMode] = aUseState(() => { try { const v = localStorage.getItem('ls-dark'); return v === null ? true : v === '1'; } catch (e) { return true; } });  /* 2026-07-09 默认暗色（v2 月夜风格），已有偏好尊重 */
   const [view, setView] = aUseState('player');         // player | playlist | browse | together
   const [idx, setIdx]   = aUseState(0);
   const [playing, setPlaying] = aUseState(false);
