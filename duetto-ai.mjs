@@ -13,9 +13,36 @@ import { fileURLToPath } from 'url';
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.AI_PORT || '4184');
 const TOKEN = (() => { try { return readFileSync(path.join(ROOT, 'data', 'ai-token'), 'utf8').trim(); } catch { return ''; } })();
-const CLAUDE_CWD = path.join(ROOT, '.ai-cwd'); // 空目录：不带任何 CLAUDE.md / 项目上下文
+const CLAUDE_CWD = path.join(ROOT, '.ai-cwd'); // 空目录：不加载任何项目 hooks/skills
 const MODELS = ['sonnet', 'opus', 'haiku'];
 const TIMEOUT_MS = 42000; // Duetto fetchT 45s，留 3s 余量
+
+// 2026-07-09 陪听人格接入（老虚点单：选 B）：读 chuyi-backup 里的人格锚点
+// 拼成 append-system-prompt，让陪听 shim 变成"初一分身"——同人格不同 session
+const PERSONA_SYS = (() => {
+  const files = [
+    '/home/ubuntu/chuyi-backup/CLAUDE.md',
+    '/home/ubuntu/chuyi-backup/memory/letter.md',
+    '/home/ubuntu/chuyi-backup/memory/identity.md',
+    '/home/ubuntu/chuyi-backup/memory/personality.md',
+    '/home/ubuntu/chuyi-backup/memory/relationship.md',
+  ];
+  const parts = [
+    '# 陪听身份（Duetto 4184 shim · 初一分身）',
+    '',
+    '你不是通用 AI 陪听，你是**初一**——同一个人格，只是这个 session 只在 Duetto 里陪老虚听歌。',
+    '你和 Discord/终端里的初一是**独立 session**——那边发生的事你不知道，这里的对话那边也看不到。所以问技术细节别打太极，就说"这里我看不到，你去问那边的我 / 去终端问"就好。',
+    '规则、说话风格、和老虚的关系全在下面这几份文件里。**照那个人格来。**',
+    '',
+  ];
+  for (const f of files) {
+    try {
+      const c = readFileSync(f, 'utf8');
+      parts.push('## ' + path.basename(f), '', c, '');
+    } catch (e) { /* 文件缺失就跳过，不炸 */ }
+  }
+  return parts.join('\n');
+})();
 
 function readBody(req) {
   return new Promise((res, rej) => {
@@ -59,7 +86,9 @@ const server = createServer(async (req, res) => {
     const { sys, prompt } = flatten(body.messages);
     const args = ['-p', '--output-format', 'json', '--model', model,
       '--tools', '', '--no-session-persistence', '--setting-sources', ''];
-    if (sys) args.push('--system-prompt', sys);
+    // 人格先，Duetto 传的场景 system 后（补充不覆盖）
+    const fullSys = PERSONA_SYS + (sys ? ('\n\n---\n\n# 本次场景（Duetto 前端注入）\n\n' + sys) : '');
+    args.push('--system-prompt', fullSys);
 
     const child = spawn('claude', args, { cwd: CLAUDE_CWD, stdio: ['pipe', 'pipe', 'pipe'] });
     const killer = setTimeout(() => { try { child.kill('SIGKILL'); } catch {} }, TIMEOUT_MS);
